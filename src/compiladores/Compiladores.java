@@ -8,8 +8,6 @@ package compiladores;
 import clases_de_analisis.AnalizadorArchivos;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javax.swing.JFileChooser;
 
 /**
@@ -28,19 +26,40 @@ public class Compiladores {
         chooser.showOpenDialog(null);
         
         AnalizadorArchivos analizador = new AnalizadorArchivos(chooser.getSelectedFile());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        System.out.println(analizador.obtenerCadena());
-        
+        String cadena = "";
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+               cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
     }
     
 }

@@ -17,14 +17,18 @@ import java.util.regex.*;
  * @author depot
  */
 public class AnalizadorArchivos {
-    
+
     private final File archivo_analizar;
     private final FileReader lector;
     private final BufferedReader buffer;
     private int valorCaracterActual;
     private int valorCaracterAnterior;
     private boolean estado_lector;
-    
+    private boolean cadena_activada;
+    private static final String[] simbolos = new String[]{"cte","float","int","string","char","bool","read",
+                                                          "true","false","+","-","/","*","==","!=","<",">",
+                                                          "<=",">=","&&","||","=",";",",","if","else if","else",
+                                                          "for","print"};
     //Objetos para checar identificadores
     private final Pattern patron;
     
@@ -36,7 +40,8 @@ public class AnalizadorArchivos {
         this.valorCaracterActual = Caracter.ESPACIO_BLANCO.getValue();
         this.valorCaracterAnterior = Caracter.ESPACIO_BLANCO.getValue();
         this.estado_lector = false;//falso si no se ha empezado a leer, y verdadero en caso contrario
-        this.patron = Pattern.compile("^(int$)|(float$)|(char$)|(double$)|(String$)");//expresion regular para identificadores
+        this.patron = Pattern.compile("^(int$)|(float$)|(char$)|(double$)|(string$)|(cte$)|(bool$)|(print$)|"
+                                      +"(true$)|(false$)|(if$)|(else$)|(else if$)|(for$)");//expresion regular para identificadores
     }
     
     public char getCaracterActual() throws IOException{
@@ -51,7 +56,7 @@ public class AnalizadorArchivos {
         this.buffer.close();
     }
     
-    public String obtenerCadena() throws IOException{
+     public String obtenerCadena() throws IOException{
         
         if(this.valorCaracterAnterior == Caracter.FIN_DOCUMENTO.getValue()){
             return "Fin del archivo";
@@ -63,8 +68,12 @@ public class AnalizadorArchivos {
         if(!this.estado_lector){//Si aun no se habia empezado a leer el archivo
            this.valorCaracterAnterior = this.buffer.read();
            //Nos posicionamos en la primer letra por ser la primer lectura
-           if(this.valorCaracterAnterior == Caracter.ESPACIO_BLANCO.getValue()){
-              while((this.valorCaracterAnterior = this.buffer.read()) != Caracter.ESPACIO_BLANCO.getValue()){}
+           if(this.valorCaracterAnterior == Caracter.ESPACIO_BLANCO.getValue())
+           {
+              while((this.valorCaracterAnterior = this.buffer.read()) != Caracter.ESPACIO_BLANCO.getValue())
+              {
+                  
+              }
            }
         }
     
@@ -87,25 +96,117 @@ public class AnalizadorArchivos {
             }
             
             this.valorCaracterAnterior = this.valorCaracterActual;
+            
         }else if(Caracter.NUMERO.isInRange(this.valorCaracterAnterior)){
            //Aqui verificamos que sea un numero valido
            palabra_retorno =  obtenerNumeroValido((char)this.valorCaracterAnterior);
             this.valorCaracterAnterior = this.valorCaracterActual;
+            
         }else if(Caracter.SIMBOLOS_PARENTESIS.isInRange(this.valorCaracterAnterior)){
             //Si son parentesis, unicamente se manda, y el que sigue
             palabra_retorno = (char) this.valorCaracterAnterior + "";
             this.valorCaracterAnterior = this.buffer.read();
+            
         }else if(Caracter.SIMBOLO_ABRIR.getValue() == this.valorCaracterAnterior ||
                  Caracter.SIMBOLO_CERRAR.getValue() == this.valorCaracterAnterior){
             //Si son simbolos de corchetes, unicamente se mandan
             palabra_retorno = (char) this.valorCaracterAnterior + "";
             this.valorCaracterAnterior = this.buffer.read();
-        }else if(Caracter.SIMBOLOS_OPERACION.isInRange(this.valorCaracterAnterior)){
+            
+        }else if(Caracter.PUNTO_COMA.getValue() == this.valorCaracterAnterior){
             palabra_retorno = (char) this.valorCaracterAnterior + "";
             this.valorCaracterAnterior = this.buffer.read();
-        }else{
+            
+        }else if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
+            //Checamos si el siguiente es el mismo
+            palabra_retorno = (char) this.valorCaracterAnterior + "";
             this.valorCaracterAnterior = this.buffer.read();
-            palabra_retorno = " ";
+            
+            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                this.valorCaracterAnterior = this.buffer.read();
+            }
+        }else if(Caracter.EXCLAMACION.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterAnterior + "";
+            this.valorCaracterAnterior = this.buffer.read();
+            
+            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                this.valorCaracterAnterior = this.buffer.read();
+            }
+        }else if(Caracter.MENOR_QUE.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterAnterior + "";
+            this.valorCaracterAnterior = this.buffer.read();
+            
+            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                this.valorCaracterAnterior = this.buffer.read();
+            }
+            
+        }else if(Caracter.MAYOR_QUE.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterAnterior + "";
+            this.valorCaracterAnterior = this.buffer.read();
+            
+            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                this.valorCaracterAnterior = this.buffer.read();
+            }
+            
+        }else if(Caracter.AMPERSON.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterAnterior + "";
+            this.valorCaracterAnterior = this.buffer.read();
+            
+            if(Caracter.AMPERSON.getValue() == this.valorCaracterAnterior){
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                this.valorCaracterAnterior = this.buffer.read();
+            }
+            
+        }else if(Caracter.LINEA_OR.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterAnterior + "";
+            this.valorCaracterAnterior = this.buffer.read();
+            
+            if(Caracter.LINEA_OR.getValue() == this.valorCaracterAnterior){
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                this.valorCaracterAnterior = this.buffer.read();
+            }
+            
+        }
+        //Si son simbolos de retorno de carro, saltos de línea o espacios, se eliminan, no se guardan
+        else if(Caracter.RETORNO_DE_CARRO.getValue() == this.valorCaracterAnterior){
+            this.valorCaracterAnterior = this.buffer.read();
+            palabra_retorno = obtenerCadena();
+            
+        }else if(Caracter.SALTO_LINEA.getValue() == this.valorCaracterAnterior){
+            this.valorCaracterAnterior = this.buffer.read();
+            palabra_retorno = obtenerCadena();
+            
+        }
+        else if(Caracter.ESPACIO_BLANCO.getValue() == this.valorCaracterAnterior){
+            this.valorCaracterAnterior = this.buffer.read();
+            palabra_retorno = obtenerCadena();
+            
+        }else if(this.valorCaracterAnterior == Caracter.COMILLAS.getValue()){
+            //Cuando se encuentra con comillas, lee todo el contenido para regresarlo junto
+            this.cadena_activada = true;
+            
+                
+            while(this.cadena_activada){
+                this.valorCaracterAnterior = this.buffer.read();
+                palabra_retorno += (char) this.valorCaracterAnterior + "";
+                if(this.valorCaracterAnterior == Caracter.COMILLAS.getValue()){
+                    this.valorCaracterAnterior = this.buffer.read();
+                    this.cadena_activada = false;
+                    
+                }
+            }
+            
+        }else{
+            //Aqui entra si no es válida la primer letra para formar algo válido
+            this.valorCaracterAnterior = this.buffer.read();
+            if(this.valorCaracterAnterior != Caracter.ESPACIO_BLANCO.getValue()){
+                palabra_retorno += (char) this.valorCaracterAnterior;
+                palabra_retorno = leerPalabraRestante(palabra_retorno);//Leemos lo restante, ya que no es válido
+            }
         }
         
         //Checamos si ya acabamos de leer todo el documento
@@ -118,6 +219,22 @@ public class AnalizadorArchivos {
         return palabra_retorno;
     }
     
+    private String leerPalabraRestante(String inicio) throws IOException{
+        String palabraRestante = "";
+        palabraRestante += inicio;
+       
+        this.valorCaracterAnterior = this.buffer.read();
+        
+        while(this.valorCaracterAnterior != Caracter.ESPACIO_BLANCO.getValue() &&
+              this.valorCaracterAnterior != Caracter.FIN_DOCUMENTO.getValue() &&
+              this.valorCaracterActual != Caracter.SALTO_LINEA.getValue() &&
+              this.valorCaracterActual != Caracter.RETORNO_DE_CARRO.getValue()){
+           palabraRestante += (char) this.valorCaracterAnterior;
+           this.valorCaracterAnterior = this.buffer.read();
+        }
+            
+        return palabraRestante;
+    }
     private String obtenerNumeroValido(char primerDigito) throws IOException{
         String numeroValido = primerDigito + "";//Aqui guardamos el string resultante
         
@@ -200,6 +317,101 @@ public class AnalizadorArchivos {
            return variableValida;
         }
         return variableValida;
+    }
+    
+    public String isCadenaValida(String cadena){
+        if(isSimbol(cadena) || isNumero(cadena) || isNombreVariable(cadena) || isCadena(cadena)){
+            return "Es válido";
+        }
+        return "No es válido";
+    }
+    
+    private boolean isCadena(String cadena){
+        //Primero vemos si al inicio y al final hay comillas
+        if(cadena.charAt(0) != Caracter.COMILLAS.getValue() || 
+           cadena.charAt(cadena.length() - 1) != Caracter.COMILLAS.getValue()){
+            return false;
+        }else{
+           for(int posicionInicial = 1; posicionInicial <= cadena.length() - 2;posicionInicial++){
+               if(cadena.charAt(posicionInicial) == Caracter.COMILLAS.getValue()){
+                   return false;
+               }
+           } 
+        }
+        
+        return true;
+    }
+    private boolean isNombreVariable(String cadena){
+        String aux = cadena;
+        char caracter = cadena.charAt(0);
+        
+        for(int posicionCaracter = 0; posicionCaracter < cadena.length(); posicionCaracter++){
+            if(posicionCaracter == 0){//El primer caracter tiene que ser letra, si no cumple, es un nombre de variable no valido
+                int valor = (int) caracter;
+                if(!Caracter.LETRA_MAY.isInRange((int) caracter) && 
+                   !Caracter.LETRA_MIN.isInRange((int) caracter)){
+                    return false;
+                }
+            }
+            
+            if(!Caracter.LETRA_MAY.isInRange((int) caracter) && 
+               !Caracter.LETRA_MIN.isInRange((int) caracter) &&
+                Caracter.SIMBOLO_LINEA_BAJA.getValue() != caracter){
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    private boolean isNumero(String cadena){
+        String aux = cadena;
+        int caracter_posicion = 0;
+        char caracter = cadena.charAt(caracter_posicion);
+        
+        //Comparamos los primeros digitos
+        while(Caracter.NUMERO.isInRange((int)caracter)){
+            caracter_posicion++;
+            if(caracter_posicion < cadena.length()){
+                caracter = cadena.charAt(caracter_posicion);
+            }else{
+                caracter = (char) -1;
+            }
+        }
+        
+        //Si el siguiente es punto
+        if(caracter == Caracter.SIMBOLO_PUNTO.getValue()){//Si hay punto, checamos que el numero decimal sea correcto
+            caracter_posicion++;
+            caracter = cadena.charAt(caracter_posicion);
+            //Comparamos los digitos despues del punto
+            while(Caracter.NUMERO.isInRange((int)caracter)){
+                caracter_posicion++;
+                if(caracter_posicion < cadena.length()){
+                    caracter = cadena.charAt(caracter_posicion);
+                }else{
+                    caracter = (char) -1;
+                }
+            }
+            //Unicamente es valido si el caracter es -1, si tiene otro valor, no es válido
+            if(caracter == Caracter.FIN_DOCUMENTO.getValue()){
+                return true;
+            }
+            return false;
+        }else if(caracter == Caracter.FIN_DOCUMENTO.getValue()){//Si es fin, solo se formó un entero sin decimal
+            return true;
+        }
+        
+        return false;
+    }
+    private boolean isSimbol(String cadena){
+        
+        for (String simbolo : AnalizadorArchivos.simbolos) {
+            if(cadena.equals(simbolo)){
+                return true;
+            }
+        }
+            
+        
+        return false;
     }
     
 }

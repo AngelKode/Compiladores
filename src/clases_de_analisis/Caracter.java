@@ -12,17 +12,26 @@ package clases_de_analisis;
  */
 public enum Caracter{
     
-    ESPACIO_BLANCO(32), 
     FIN_DOCUMENTO(-1),
+    SALTO_LINEA(10),
+    RETORNO_DE_CARRO(13),
+    ESPACIO_BLANCO(32),
+    EXCLAMACION(33),
+    AMPERSON(38),
+    SIMBOLOS_PARENTESIS(40,41),
+    SIMBOLO_PUNTO(46),
     NUMERO(48,57),
+    PUNTO_COMA(59),
+    MENOR_QUE(60),
+    IGUAL(61),
+    MAYOR_QUE(62),
     LETRA_MAY(65,90),
     LETRA_MIN(97,122),
-    SIMBOLOS_OPERACION(59,62),
-    SIMBOLOS_PARENTESIS(40,41),
     SIMBOLO_ABRIR(123),
-    SIMBOLO_PUNTO(46),
+    LINEA_OR(124),
     SIMBOLO_LINEA_BAJA(95),
-    SIMBOLO_CERRAR(125);
+    SIMBOLO_CERRAR(125),
+    COMILLAS(34);
     
     private int valor_ascii;
     private int valor_inicio_ascii;
@@ -38,10 +47,7 @@ public enum Caracter{
     }
     
     public boolean isInRange(int valor_comparar){
-        if(valor_comparar >= this.valor_inicio_ascii && valor_comparar <= this.valor_final_ascii){
-            return true;
-        }
-        return false;
+        return (valor_comparar >= this.valor_inicio_ascii) && (valor_comparar <= this.valor_final_ascii);
     }
     
     public int getValue(){
