@@ -28,7 +28,7 @@ public class AnalizadorArchivos {
     private static final String[] simbolos = new String[]{"cte","float","int","string","char","bool","read",
                                                           "true","false","+","-","/","*","==","!=","<",">",
                                                           "<=",">=","&&","||","=",";",",","if","else if","else",
-                                                          "for","print"};
+                                                          "for","print","(",")","{","}"};
     //Objetos para checar identificadores
     private final Pattern patron;
     
@@ -41,7 +41,7 @@ public class AnalizadorArchivos {
         this.valorCaracterAnterior = Caracter.ESPACIO_BLANCO.getValue();
         this.estado_lector = false;//falso si no se ha empezado a leer, y verdadero en caso contrario
         this.patron = Pattern.compile("^(int$)|(float$)|(char$)|(double$)|(string$)|(cte$)|(bool$)|(print$)|"
-                                      +"(true$)|(false$)|(if$)|(else$)|(else if$)|(for$)");//expresion regular para identificadores
+                                      +"(true$)|(false$)|(if$)|(else$)|(for$)");//expresion regular para identificadores
     }
     
     public char getCaracterActual() throws IOException{
@@ -91,6 +91,20 @@ public class AnalizadorArchivos {
             Matcher matcher = this.patron.matcher(palabra_retorno);
             if(matcher.find()){
                 System.out.print("Hay un identificador: ");
+                if(this.valorCaracterActual != Caracter.FIN_DOCUMENTO.getValue()){
+                    if(palabra_retorno.equals("else")){
+                        this.buffer.mark(1000);//Marcamos la posicion del buffer
+                        this.valorCaracterActual = this.buffer.read();
+                        String aux = obtenerVariableValido((char) this.valorCaracterActual);
+
+                        if(aux.equals("if")){
+                            palabra_retorno += " " + aux;
+                        }else{
+                            this.buffer.reset();
+                        }
+                        
+                    }
+                }
             }else{
                 System.out.print("No hay identificador: ");
             }
@@ -100,7 +114,7 @@ public class AnalizadorArchivos {
         }else if(Caracter.NUMERO.isInRange(this.valorCaracterAnterior)){
            //Aqui verificamos que sea un numero valido
            palabra_retorno =  obtenerNumeroValido((char)this.valorCaracterAnterior);
-            this.valorCaracterAnterior = this.valorCaracterActual;
+           this.valorCaracterAnterior = this.valorCaracterActual;
             
         }else if(Caracter.SIMBOLOS_PARENTESIS.isInRange(this.valorCaracterAnterior)){
             //Si son parentesis, unicamente se manda, y el que sigue
@@ -364,43 +378,32 @@ public class AnalizadorArchivos {
         return true;
     }
     private boolean isNumero(String cadena){
+          
         String aux = cadena;
-        int caracter_posicion = 0;
-        char caracter = cadena.charAt(caracter_posicion);
+        char caracter = ' ';
+        int posicion = 0;
         
-        //Comparamos los primeros digitos
-        while(Caracter.NUMERO.isInRange((int)caracter)){
-            caracter_posicion++;
-            if(caracter_posicion < cadena.length()){
-                caracter = cadena.charAt(caracter_posicion);
-            }else{
-                caracter = (char) -1;
+        for(int i=0;i<cadena.length();i++){
+            caracter = cadena.charAt(i);
+            posicion = i;
+            if(caracter == '.'){
+                break;
+            }else if(!Caracter.NUMERO.isInRange((int) caracter)){
+                return false;
             }
         }
         
-        //Si el siguiente es punto
-        if(caracter == Caracter.SIMBOLO_PUNTO.getValue()){//Si hay punto, checamos que el numero decimal sea correcto
-            caracter_posicion++;
-            caracter = cadena.charAt(caracter_posicion);
-            //Comparamos los digitos despues del punto
-            while(Caracter.NUMERO.isInRange((int)caracter)){
-                caracter_posicion++;
-                if(caracter_posicion < cadena.length()){
-                    caracter = cadena.charAt(caracter_posicion);
-                }else{
-                    caracter = (char) -1;
-                }
+        //Evaluamos que todos sean numeros, si no, no es un numero valido
+        for(int i=posicion + 1;i<cadena.length();i++){
+            caracter = cadena.charAt(i);
+                
+            if(!Caracter.NUMERO.isInRange((int) caracter)){
+                return false;
             }
-            //Unicamente es valido si el caracter es -1, si tiene otro valor, no es válido
-            if(caracter == Caracter.FIN_DOCUMENTO.getValue()){
-                return true;
-            }
-            return false;
-        }else if(caracter == Caracter.FIN_DOCUMENTO.getValue()){//Si es fin, solo se formó un entero sin decimal
-            return true;
+            
         }
         
-        return false;
+        return true;
     }
     private boolean isSimbol(String cadena){
         
