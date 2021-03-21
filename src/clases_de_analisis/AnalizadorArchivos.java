@@ -91,15 +91,19 @@ public class AnalizadorArchivos {
             Matcher matcher = this.patron.matcher(palabra_retorno);
             if(matcher.find()){
                 System.out.print("Hay un identificador: ");
-                if(this.valorCaracterActual != Caracter.FIN_DOCUMENTO.getValue()){
+                if(this.valorCaracterActual != Caracter.FIN_DOCUMENTO.getValue() &&
+                   this.valorCaracterActual == Caracter.ESPACIO_BLANCO.getValue()){
+                    //Checamos si la palabra es un else
                     if(palabra_retorno.equals("else")){
                         this.buffer.mark(1000);//Marcamos la posicion del buffer
-                        this.valorCaracterActual = this.buffer.read();
-                        String aux = obtenerVariableValido((char) this.valorCaracterActual);
+                        this.valorCaracterActual = this.buffer.read();//Leemos el siguiente caracter
+                        String aux = obtenerVariableValido((char) this.valorCaracterActual);//Y obtenemos la cadena que se forma
 
+                        //Si la cadena que se formó es un if
                         if(aux.equals("if")){
                             palabra_retorno += " " + aux;
                         }else{
+                            //Si no es un if, reseteamos a la posicion en donde empezamos a leer
                             this.buffer.reset();
                         }
                         

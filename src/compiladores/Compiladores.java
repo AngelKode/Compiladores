@@ -87,6 +87,42 @@ public class Compiladores {
         cadena = analizador.obtenerCadena();
         System.out.print(cadena + " - ");
         System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+                cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
+        cadena = analizador.obtenerCadena();
+        System.out.print(cadena + " - ");
+        System.out.println(analizador.isCadenaValida(cadena));
     }
     
 }
