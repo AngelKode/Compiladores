@@ -22,6 +22,7 @@ public class Compiladores {
      */
     public static void main(String[] args) throws FileNotFoundException, IOException {
         // TODO code application logic here
+        /*
         JFileChooser chooser = new JFileChooser();
         chooser.showOpenDialog(null);
         
@@ -123,6 +124,7 @@ public class Compiladores {
         cadena = analizador.obtenerCadena();
         System.out.print(cadena + " - ");
         System.out.println(analizador.isCadenaValida(cadena));
+                */
     }
     
 }
