@@ -39,208 +39,217 @@ public class AnalizadorArchivos {
     private static final String[] follows_AUXCTE = new String[]{"var","process" , "read" ,"print" ,"for" , "if"};
     private static final String[] follows_AUXVAR = new String[]{"var","process" , "read" , "print" , "for" ,"if"};
     private static final String[] follows_Process = new String[]{"read" , "print" , "for" ,"if"};
+    private static final String[] follows_AUX4 = new String[]{"*","+","/","-"};
     
     private static final String[] first = null;
+    private String variableError;
+    private String token_actual, dataTypeActual, dataTypeAnterior, token_anterior;
+    private boolean addVariable, isDone, canRead;
     private ArrayList<String> variablesInicializadas;
     //Objetos para checar identificadores
     private final Pattern patron;
     
 
-    public AnalizadorArchivos(File archivo) throws FileNotFoundException {
+    public AnalizadorArchivos(File archivo) throws FileNotFoundException, IOException {
         this.archivo_analizar = archivo;
         this.lector = new FileReader(this.archivo_analizar);
         this.buffer = new BufferedReader(lector);
+            this.buffer.mark(50);
+            this.buffer.read();
         this.valorCaracterActual = Caracter.ESPACIO_BLANCO.getValue();
         this.valorCaracterAnterior = Caracter.ESPACIO_BLANCO.getValue();
         this.variablesInicializadas = new ArrayList<>();
         this.estado_lector = false;//falso si no se ha empezado a leer, y verdadero en caso contrario
         this.patron = Pattern.compile("^(int$)|(float$)|(char$)|(double$)|(string$)|(cte$)|(bool$)|(print$)|"
                                       +"(true$)|(false$)|(if$)|(else$)|(for$)");//expresion regular para identificadores
+        this.token_actual = "";
+        this.token_anterior = "";
+        this.addVariable = false;
+        this.isDone = false;
+        this.canRead = true;
+        this.dataTypeAnterior = "";
+        this.dataTypeActual = "";
     }
     
-    public char getCaracterActual() throws IOException{
+    private char getCaracterActual() throws IOException{
         return (char)this.buffer.read(); 
     }
     
-    public void imprimirSiguiente() throws IOException{
+    private void imprimirSiguiente() throws IOException{
         System.out.println(getCaracterActual()+"");
     }
     
-    public void cerrarBuffer() throws IOException{
+    private void cerrarBuffer() throws IOException{
         this.buffer.close();
     }
-    
-     public String obtenerCadena() throws IOException{
+   
+    public String obtenerCadena() throws IOException{
         
-        if(this.valorCaracterAnterior == Caracter.FIN_DOCUMENTO.getValue()){
-            return "Fin del archivo";
+        //Marcamos la posicion actual
+        this.buffer.reset();
+        //Leemos el siguiente caracter
+        this.valorCaracterActual = this.buffer.read();
+        if((this.valorCaracterActual) == Caracter.FIN_DOCUMENTO.getValue()){
+            this.isDone = true;
+            return "";
         }
-             
-        this.valorCaracterActual = 0;//Para obtener el caracter actual
+        //Guardamos la posicion actual
+        this.buffer.mark(50);
         String palabra_retorno = "";//Aqui irá la palabra, numero o identificador obtenido
         
         if(!this.estado_lector){//Si aun no se habia empezado a leer el archivo
-           this.valorCaracterAnterior = this.buffer.read();
            //Nos posicionamos en la primer letra por ser la primer lectura
-           if(this.valorCaracterAnterior == Caracter.ESPACIO_BLANCO.getValue())
-           {
-              while((this.valorCaracterAnterior = this.buffer.read()) != Caracter.ESPACIO_BLANCO.getValue())
-              {
-                  
+           if(this.valorCaracterActual == Caracter.ESPACIO_BLANCO.getValue()){
+              while((this.valorCaracterActual = this.buffer.read()) == Caracter.ESPACIO_BLANCO.getValue()){
+                  this.buffer.mark(50);
               }
            }
         }
-    
-        //Agregamos la letra que ya se leyó
-        palabra_retorno += (char) this.valorCaracterAnterior;
         
+        //Agregamos el caracter a la palabra
+        palabra_retorno += (char) this.valorCaracterActual;
+       
         //Checamos en donde entra el primer caracter
-        if(Caracter.LETRA_MAY.isInRange(this.valorCaracterAnterior) || 
-           Caracter.LETRA_MIN.isInRange(this.valorCaracterAnterior)){
+        if(Caracter.LETRA_MAY.isInRange(this.valorCaracterActual) || 
+           Caracter.LETRA_MIN.isInRange(this.valorCaracterActual)){
             
             //Aqui verificamos si es un valor de variable valido
-            palabra_retorno = obtenerVariableValido((char) this.valorCaracterAnterior);
+            palabra_retorno = obtenerVariableValido((char) this.valorCaracterActual);
             
             //Checamos si es identificador o no
             Matcher matcher = this.patron.matcher(palabra_retorno);
             if(matcher.find()){
-                System.out.print("Hay un identificador: ");
                 if(this.valorCaracterActual != Caracter.FIN_DOCUMENTO.getValue() &&
-                   this.valorCaracterActual == Caracter.ESPACIO_BLANCO.getValue()){
-                    //Checamos si la palabra es un else
-                    if(palabra_retorno.equals("else")){
-                        this.buffer.mark(1000);//Marcamos la posicion del buffer
-                        this.valorCaracterActual = this.buffer.read();//Leemos el siguiente caracter
-                        String aux = obtenerVariableValido((char) this.valorCaracterActual);//Y obtenemos la cadena que se forma
-
-                        //Si la cadena que se formó es un if
-                        if(aux.equals("if")){
-                            palabra_retorno += " " + aux;
+                   this.valorCaracterActual != Caracter.ESPACIO_BLANCO.getValue()){
+                    if(palabra_retorno.equals("cte") || palabra_retorno.equals("var")){
+                        this.addVariable = true;
+                        if(this.dataTypeAnterior.equals(palabra_retorno) || this.dataTypeAnterior.equals("")){
+                            this.dataTypeAnterior = palabra_retorno;
                         }else{
-                            //Si no es un if, reseteamos a la posicion en donde empezamos a leer
-                            this.buffer.reset();
+                            this.addVariable = false;
                         }
-                        
                     }
                 }
             }else{
-                System.out.print("No hay identificador: ");
-                //Agregamos la variable ya que no es un identificador
-                this.variablesInicializadas.add(palabra_retorno);
-            }
-          
-            //Actualizamos el valor de el caracter anterior
-            this.valorCaracterAnterior = this.valorCaracterActual;
-            
-        }else if(Caracter.NUMERO.isInRange(this.valorCaracterAnterior)){
+                if(this.addVariable){
+                    this.variablesInicializadas.add(palabra_retorno);
+                }
+            }      
+        }else if(Caracter.NUMERO.isInRange(this.valorCaracterActual)){
            //Aqui verificamos que sea un numero valido
-           palabra_retorno =  obtenerNumeroValido((char)this.valorCaracterAnterior);
-           this.valorCaracterAnterior = this.valorCaracterActual;
-            
-        }else if(Caracter.SIMBOLOS_PARENTESIS.isInRange(this.valorCaracterAnterior)){
+           palabra_retorno =  obtenerNumeroValido((char)this.valorCaracterActual);
+        }else if(Caracter.SIMBOLOS_PARENTESIS.isInRange(this.valorCaracterActual)){
             //Si son parentesis, unicamente se manda, y el que sigue
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
-            
-        }else if(Caracter.SIMBOLO_ABRIR.getValue() == this.valorCaracterAnterior ||
-                 Caracter.SIMBOLO_CERRAR.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+        }else if(Caracter.SIMBOLO_ABRIR.getValue() == this.valorCaracterActual ||
+                 Caracter.SIMBOLO_CERRAR.getValue() == this.valorCaracterActual){
             //Si son simbolos de corchetes, unicamente se mandan
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
-            
-        }else if(Caracter.PUNTO_COMA.getValue() == this.valorCaracterAnterior){
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
-            
-        }else if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.buffer.read();
+        }else if(Caracter.PUNTO_COMA.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + ""; 
+        }else if(Caracter.COMA.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+        }else if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
             //Checamos si el siguiente es el mismo
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
             
-            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                this.valorCaracterAnterior = this.buffer.read();
+            if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                this.buffer.mark(50);
             }
-        }else if(Caracter.EXCLAMACION.getValue() == this.valorCaracterAnterior){
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
+        }else if(Caracter.EXCLAMACION.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
             
-            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                this.valorCaracterAnterior = this.buffer.read();
-            }
-        }else if(Caracter.MENOR_QUE.getValue() == this.valorCaracterAnterior){
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
+            if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                this.buffer.mark(50);
+            }      
+        }else if(Caracter.MENOR_QUE.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
             
-            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                this.valorCaracterAnterior = this.buffer.read();
-            }
+            if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                this.buffer.mark(50);
+            }      
+        }else if(Caracter.MAYOR_QUE.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
             
-        }else if(Caracter.MAYOR_QUE.getValue() == this.valorCaracterAnterior){
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
+            if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                this.buffer.mark(50);
+            }           
+        }else if(Caracter.AMPERSON.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
             
-            if(Caracter.IGUAL.getValue() == this.valorCaracterAnterior){
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                this.valorCaracterAnterior = this.buffer.read();
-            }
-            
-        }else if(Caracter.AMPERSON.getValue() == this.valorCaracterAnterior){
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
-            
-            if(Caracter.AMPERSON.getValue() == this.valorCaracterAnterior){
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                this.valorCaracterAnterior = this.buffer.read();
-            }
-            
-        }else if(Caracter.LINEA_OR.getValue() == this.valorCaracterAnterior){
-            palabra_retorno = (char) this.valorCaracterAnterior + "";
-            this.valorCaracterAnterior = this.buffer.read();
-            
-            if(Caracter.LINEA_OR.getValue() == this.valorCaracterAnterior){
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                this.valorCaracterAnterior = this.buffer.read();
+            if(Caracter.AMPERSON.getValue() == this.valorCaracterActual){
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                this.buffer.mark(50);
+            }      
+        }else if(Caracter.LINEA_OR.getValue() == this.valorCaracterActual){
+            palabra_retorno = (char) this.valorCaracterActual + "";
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
+                  
+            if(Caracter.LINEA_OR.getValue() == this.valorCaracterActual){
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                this.buffer.mark(50);
             }
             
         }
         //Si son simbolos de retorno de carro, saltos de línea o espacios, se eliminan, no se guardan
-        else if(Caracter.RETORNO_DE_CARRO.getValue() == this.valorCaracterAnterior){
-            this.valorCaracterAnterior = this.buffer.read();
+        else if(Caracter.RETORNO_DE_CARRO.getValue() == this.valorCaracterActual){
+            palabra_retorno = "";
+            this.buffer.read();
+            this.buffer.mark(50);
             palabra_retorno = obtenerCadena();
-            
-        }else if(Caracter.SALTO_LINEA.getValue() == this.valorCaracterAnterior){
-            this.valorCaracterAnterior = this.buffer.read();
-            palabra_retorno = obtenerCadena();
-            
+        }else if(Caracter.SALTO_LINEA.getValue() == this.valorCaracterActual){
+            palabra_retorno = "";
+            this.buffer.read();
+            this.buffer.mark(50);
+            palabra_retorno = obtenerCadena(); 
         }
-        else if(Caracter.ESPACIO_BLANCO.getValue() == this.valorCaracterAnterior){
-            this.valorCaracterAnterior = this.buffer.read();
+        else if(Caracter.ESPACIO_BLANCO.getValue() == this.valorCaracterActual){
+            palabra_retorno = "";
+            //Nos movemos hasta una posicion antes de los espacios que haya
+            while((this.valorCaracterActual = this.buffer.read()) == Caracter.ESPACIO_BLANCO.getValue()){
+                this.buffer.mark(50);
+            }
             palabra_retorno = obtenerCadena();
-            
-        }else if(this.valorCaracterAnterior == Caracter.COMILLAS.getValue()){
+        }else if(this.valorCaracterActual == Caracter.COMILLAS.getValue()){
             //Cuando se encuentra con comillas, lee todo el contenido para regresarlo junto
             this.cadena_activada = true;
-            
-                
+    
             while(this.cadena_activada){
-                this.valorCaracterAnterior = this.buffer.read();
-                palabra_retorno += (char) this.valorCaracterAnterior + "";
-                if(this.valorCaracterAnterior == Caracter.COMILLAS.getValue()){
-                    this.valorCaracterAnterior = this.buffer.read();
-                    this.cadena_activada = false;
-                    
+                this.buffer.mark(50);
+                this.valorCaracterActual = this.buffer.read();
+                palabra_retorno += (char) this.valorCaracterActual + "";
+                if(this.valorCaracterActual == Caracter.COMILLAS.getValue()){
+                    this.valorCaracterActual = this.buffer.read();
+                    this.buffer.mark(50);
+                    this.cadena_activada = false;   
                 }
             }
             
         }else{
             //Aqui entra si no es válida la primer letra para formar algo válido
-            this.valorCaracterAnterior = this.buffer.read();
-            if(this.valorCaracterAnterior != Caracter.ESPACIO_BLANCO.getValue()){
-                palabra_retorno += (char) this.valorCaracterAnterior;
+            this.buffer.mark(50);
+            this.valorCaracterActual = this.buffer.read();
+            if(this.valorCaracterActual != Caracter.ESPACIO_BLANCO.getValue()){
+                palabra_retorno += (char) this.valorCaracterActual;
                 palabra_retorno = leerPalabraRestante(palabra_retorno);//Leemos lo restante, ya que no es válido
+                this.buffer.mark(50);
             }
         }
         
@@ -258,46 +267,51 @@ public class AnalizadorArchivos {
         String palabraRestante = "";
         palabraRestante += inicio;
        
-        this.valorCaracterAnterior = this.buffer.read();
+        this.buffer.mark(50);
+        this.valorCaracterActual = this.buffer.read();
         
-        while(this.valorCaracterAnterior != Caracter.ESPACIO_BLANCO.getValue() &&
-              this.valorCaracterAnterior != Caracter.FIN_DOCUMENTO.getValue() &&
+        while(this.valorCaracterActual != Caracter.ESPACIO_BLANCO.getValue() &&
+              this.valorCaracterActual != Caracter.FIN_DOCUMENTO.getValue() &&
               this.valorCaracterActual != Caracter.SALTO_LINEA.getValue() &&
               this.valorCaracterActual != Caracter.RETORNO_DE_CARRO.getValue()){
-           palabraRestante += (char) this.valorCaracterAnterior;
-           this.valorCaracterAnterior = this.buffer.read();
+           palabraRestante += (char) this.valorCaracterActual;
+           this.valorCaracterActual = this.buffer.read();
+           this.buffer.mark(50);
         }
             
         return palabraRestante;
     }
     private String obtenerNumeroValido(char primerDigito) throws IOException{
-        String numeroValido = primerDigito + "";//Aqui guardamos el string resultante
-        
-        //Aqui guardamos el caracter anterior,
-        //esto en caso de que ya hayamos leido y tener el caracter
-        //que se leyó en algún lado
-        int caracterAnterior = this.buffer.read();
+        String numeroValido = "";
+        int caracterSiguiente = (int) primerDigito;
         
         //Comparamos los primeros digitos
-        while(Caracter.NUMERO.isInRange(caracterAnterior)){
-           numeroValido += (char) caracterAnterior;//agregamos el numero
-           caracterAnterior = this.buffer.read();
+        if(Caracter.NUMERO.isInRange(caracterSiguiente)){
+            numeroValido += (char) caracterSiguiente;
+            this.buffer.mark(50);
+            caracterSiguiente = this.buffer.read();
+            while(Caracter.NUMERO.isInRange(caracterSiguiente)){
+                numeroValido += (char) caracterSiguiente;//agregamos el numero
+                this.buffer.mark(50);
+                caracterSiguiente = this.buffer.read();
+            }
         }
         
         //Si el caracter ya no es un numero, checamos si es un punto decimal o no
-        if(caracterAnterior == Caracter.SIMBOLO_PUNTO.getValue()){
+        if(caracterSiguiente == Caracter.SIMBOLO_PUNTO.getValue()){
             numeroValido += (char)Caracter.SIMBOLO_PUNTO.getValue();
-            caracterAnterior = this.buffer.read();//Leemos el siguiente caracter
+            this.buffer.mark(50);
+            caracterSiguiente = (char)this.buffer.read();//Leemos el siguiente caracter
             //Si es punto decimal, checamos los numeros del lado derecho
-            while(Caracter.NUMERO.isInRange(caracterAnterior)){
-                numeroValido += (char) caracterAnterior;//agregamos el numero
-                caracterAnterior = this.buffer.read();
+            while(Caracter.NUMERO.isInRange(caracterSiguiente)){
+                numeroValido += (char) caracterSiguiente;//agregamos el numero
+                this.buffer.mark(50);
+                caracterSiguiente = this.buffer.read();
             }
             //Asignamos al valor del caracter actual donde se quedó el buffer
-            this.valorCaracterActual = caracterAnterior;
+            //this.valorCaracterActual = caracterAnterior;
         }else{
             //Ya no seria un numero valido asi que regresamos lo que llevamos de numero
-            this.valorCaracterActual = caracterAnterior;//Avanzamos al siguiente numero
             return numeroValido;
         }
         
@@ -306,55 +320,38 @@ public class AnalizadorArchivos {
 
     private String obtenerVariableValido(char caracter) throws IOException {
         String variableValida = "";
-        int caracterAnterior = this.buffer.read();
+        int caracterSiguiente = 0;
        
         //Checamos los caracteres
-        if(Caracter.LETRA_MAY.isInRange((int) caracter)){
+        if(Caracter.LETRA_MAY.isInRange((int) caracter) || Caracter.LETRA_MIN.isInRange((int) caracter)){
             variableValida += caracter;
             //Ciclo que obtiene lo que es una cadena valida
-            while(caracterAnterior != Caracter.ESPACIO_BLANCO.getValue() || 
-                caracterAnterior !=  Caracter.FIN_DOCUMENTO.getValue()){
-               
+            this.buffer.mark(50);//marcamos la posicion
+            caracterSiguiente = this.buffer.read();//leemos la siguiente letra
+            while(caracterSiguiente != Caracter.ESPACIO_BLANCO.getValue() || 
+                caracterSiguiente !=  Caracter.FIN_DOCUMENTO.getValue()){
+                
                 //Checamos si es minuscula, mayuscula o linea _
-                if(Caracter.LETRA_MAY.isInRange(caracterAnterior) ||
-                    Caracter.LETRA_MIN.isInRange(caracterAnterior) ||
-                    Caracter.SIMBOLO_LINEA_BAJA.getValue() == caracterAnterior){
-                    variableValida += (char)caracterAnterior;//agregamos el caracter
-                    caracterAnterior = this.buffer.read();//avanzamos al siguiente
+                if(Caracter.LETRA_MAY.isInRange(caracterSiguiente) ||
+                    Caracter.LETRA_MIN.isInRange(caracterSiguiente) ||
+                    Caracter.SIMBOLO_LINEA_BAJA.getValue() == caracterSiguiente){
+                    variableValida += (char)caracterSiguiente;//agregamos el caracter
+                    this.buffer.mark(50);//marcamos la posicion
+                    caracterSiguiente = this.buffer.read();//avanzamos al siguiente
                 }else{
                     //No seria valido, asi que finalizamos el ciclo
-                    this.valorCaracterActual = caracterAnterior;
                     return variableValida;
                 }
                
-            }
-        }else if(Caracter.LETRA_MIN.isInRange((int) caracter)){
-            variableValida += caracter;
-            
-            //Ciclo que obtiene lo que es una cadena valida
-            while(caracterAnterior != Caracter.ESPACIO_BLANCO.getValue() || 
-                caracterAnterior !=  Caracter.FIN_DOCUMENTO.getValue()){
-                //Checamos si es minuscula, mayuscula o linea _
-                if(Caracter.LETRA_MAY.isInRange(caracterAnterior) ||
-                    Caracter.LETRA_MIN.isInRange(caracterAnterior) ||
-                    Caracter.SIMBOLO_LINEA_BAJA.getValue() == caracterAnterior){
-                    variableValida += (char)caracterAnterior;//agregamos el caracter
-                    caracterAnterior = this.buffer.read();//avanzamos al siguiente
-                }else{
-                    //No seria valido, asi que finalizamos el ciclo
-                    this.valorCaracterActual = caracterAnterior;
-                    return variableValida;
-                }
             }
         }else{
            //Si no cumple ninguna, no formaria un nombre valido
-           this.valorCaracterActual = caracterAnterior; //Asignamos al valor del caracter actual donde se quedó el buffer
            return variableValida;
         }
         return variableValida;
     }
     
-    public String isCadenaValida(String cadena){
+    private String isCadenaValida(String cadena){
         if(isSimbol(cadena) || isNumero(cadena) || isNombreVariable(cadena) || isCadena(cadena)){
             return "Es válido";
         }
@@ -387,17 +384,18 @@ public class AnalizadorArchivos {
                    !Caracter.LETRA_MIN.isInRange((int) caracter)){
                     return false;
                 }
-            }
-            
-            if(!Caracter.LETRA_MAY.isInRange((int) caracter) && 
-               !Caracter.LETRA_MIN.isInRange((int) caracter) &&
-                Caracter.SIMBOLO_LINEA_BAJA.getValue() != caracter){
-                return false;
-            }
+            }else{
+                if(!Caracter.LETRA_MAY.isInRange((int) caracter) && 
+                   !Caracter.LETRA_MIN.isInRange((int) caracter) &&
+                    Caracter.SIMBOLO_LINEA_BAJA.getValue() != caracter){
+                    return false;
+                }
+            }     
         }
         
         return true;
     }
+    
     private boolean isNumero(String cadena){
           
         String aux = cadena;
@@ -437,13 +435,13 @@ public class AnalizadorArchivos {
         return false;
     }
     
-    private void regla_Programa() throws IOException{
+    public void regla_Programa() throws IOException{
         //Siguiente regla del bloque del programa
         regla_Bloque();
-        //Obtenemos la siguiente cadena
-        String palabra = obtenerCadena();
+        //Leemos el siguiente token
+        this.token_actual = obtenerCadena();
         //Comparamos ya que es un no terminal
-        if(palabra.equals("")){
+        if(this.token_actual.equals("")){
             System.out.println("Programa compilado exitósamente");
         }else{
             getError(CompilerError.ERROR_BLOQUE.getValue());
@@ -451,60 +449,98 @@ public class AnalizadorArchivos {
     }
     
     private void regla_Bloque() throws IOException{
-        //Ponemos las funciones para cada bloque
-        regla_AUXCTE();
-        regla_AUXVAR();
-        regla_Process();
-        regla_Proposicion();
-        //Sin condiciones ya que no es terminal
+        //Obtenemos la siguiente palabra
+        this.token_actual = obtenerCadena();
+        
+        if(!this.token_actual.equals("")){
+            //Ponemos las funciones para cada bloque
+            regla_AUXCTE();
+            regla_AUXVAR();
+            regla_Process();
+            regla_Proposicion();
+            //Sin condiciones ya que no es terminal
+        }
     }
     
     private void regla_AUXCTE() throws IOException{
-        //Obtenemos la siguiente palabra
-        String palabra = obtenerCadena();
-                
-        //Checamos los first
-        if(!palabra.equals("cte")){
-            getError(CompilerError.ERROR_AUXCONST.getValue());
-        }else{
-           //Obtenemos el nombre del identificador
-            String identificador = obtenerCadena();
-
-            if(isCadena(identificador)){
-                String signoIgual = obtenerCadena();
-
-                if(signoIgual.equals("=")){
-                    //Checamos que el siguiente sea un numero
-                    String numero = obtenerCadena();
-                    if(isNumero(numero)){
-                        regla_AUX1();
-                    }else{
-                        getError(CompilerError.ERROR_NUMEROCTE.getValue());
+        //Verificamos si hay llamada recursiva y ya terminamos
+        if(!this.isDone){
+            //Verificamos que el primer token sea distinto a 'cte'
+            if(!this.token_actual.equals("cte")){
+                //Verificamos los follows
+                boolean isFollow = false;
+                int posicionSiguienteRegla = 0;
+                for(String follows : AnalizadorArchivos.follows_AUXCTE){
+                    if(follows.equals(this.token_actual)){
+                        //Encontramos un follow
+                        isFollow = true;
+                        break;
                     }
+                    posicionSiguienteRegla++;
+                }
+                //Checamos si es follow
+                if(isFollow){
+                   switch(posicionSiguienteRegla){
+                       case 0:{
+                           regla_AUXVAR();
+                           break;
+                       }
+                       case 1:{
+                           regla_Process();
+                           break;
+                       }
+                       default:{
+                           regla_Proposicion();
+                           break;
+                       }
+                   }
                 }else{
-                    getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
+                    //Terminamos ya que ninguno es
+                    this.isDone = true;
                 }
             }else{
-                getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
-            } 
+                
+                //Obtenemos el nombre de la variable
+                this.token_actual = obtenerCadena();
+                
+                if(isNombreVariable(this.token_actual)){
+                    //Obtenemos el simbolo de asignacion
+                    this.token_actual = obtenerCadena();
+
+                    if(this.token_actual.equals("=")){
+                        //Checamos que el siguiente sea un numero
+                        this.token_actual = obtenerCadena();
+                        if(isNumero(this.token_actual)){
+                            this.token_actual = obtenerCadena();
+                            regla_AUX1();
+                        }else{
+                            getError(CompilerError.ERROR_NUMEROCTE.getValue());
+                        }
+                    }else{
+                        getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
+                    }
+                }else{
+                    getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
+                } 
+            }
         }
     }
     
     private void regla_AUX1() throws IOException{
-        //Obtenemos y tiene que ser un ; o una ,
-        String signo = obtenerCadena();
-        
-        if(signo.equals(",")){
+        //Tiene que ser un ; o una , el token 
+        if(this.token_actual.equals(",")){
             //Obtenemos el nombre del identificador
-            String identificador = obtenerCadena();
+            this.token_actual = obtenerCadena();
 
-            if(isNombreVariable(identificador)){
-                String signoIgual = obtenerCadena();
+            if(isNombreVariable(this.token_actual)){
+                this.token_actual = obtenerCadena();
 
-                if(signoIgual.equals("=")){
+                if(this.token_actual.equals("=")){
                     //Checamos que el siguiente sea un numero
-                    String numero = obtenerCadena();
-                    if(isNumero(numero)){
+                    this.token_actual = obtenerCadena();
+                    if(isNumero(this.token_actual)){
+                        //obtenemos el siguiente token
+                        this.token_actual = obtenerCadena();
                         regla_AUX1();
                     }else{
                         getError(CompilerError.ERROR_NUMEROCTE.getValue());
@@ -515,169 +551,207 @@ public class AnalizadorArchivos {
             }else{
                 getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
             } 
-        }else if(!signo.equals(";")){
+        }else if(!this.token_actual.equals(";")){
             //Si es diferente a ';' está mal
             getError(CompilerError.ERROR_FINAL_CTE.getValue());
+        }else{
+            regla_Bloque();
         }
     }
     
     
     private void regla_AUXVAR() throws IOException{
-        //Obtenemos la siguiente palabra
-        String palabra = obtenerCadena();
-
-        if(!palabra.equals("var")){
-            getError(CompilerError.ERROR_AUXVAR.getValue());
-        }else{
-            //Obtenemos el nombre del identificador
-            String identificador = obtenerCadena();
-            
-            if(isNombreVariable(identificador)){
-                regla_AUXVAR2();
+        //Checamos la llamada recursiva
+        if(!this.isDone){
+            if(!this.token_actual.equals("var")){
+                //Checamos si la palabra entra dentro de los follows
+                boolean isFollow = false;
+                int posicionSiguienteRegla = 0;
+                for(String follows : AnalizadorArchivos.follows_AUXVAR){
+                    if(follows.equals(this.token_actual)){
+                        //Encontramos un follow
+                        isFollow = true;
+                        break;
+                    }
+                    posicionSiguienteRegla++;
+                }
+                
+                //Checamos si es follow o no
+                if(isFollow){
+                    switch(posicionSiguienteRegla){
+                       case 0:{
+                           regla_Process();
+                           break;
+                       }
+                       default:{
+                           regla_Proposicion();
+                           break;
+                       }
+                   }
+                }else{
+                    this.isDone = true;
+                }
             }else{
-                getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
+                //Obtenemos el nombre del identificador
+                this.token_actual = obtenerCadena();
+
+                if(isNombreVariable(this.token_actual)){
+                    regla_AUXVAR2();
+                }else{
+                    getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
+                }
             }
         }
     }
     
     private void regla_AUXVAR2() throws IOException{
         //Checamos que sea , o ;
-        String signo = obtenerCadena();
+        this.token_actual = obtenerCadena();
         
-        if(signo.equals(",")){
+        if(this.token_actual.equals(",")){
             //Obtenemos el nombre del identificador
-            String identificador = obtenerCadena();
+            this.token_actual = obtenerCadena();
             
-            if(isNombreVariable(identificador)){
+            if(isNombreVariable(this.token_actual)){
                 regla_AUXVAR2();
             }else{
                 getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
             }
-        }else if(!signo.equals(";")){
+        }else if(!this.token_actual.equals(";")){
             getError(CompilerError.ERROR_FINAL_CTE.getValue());
+        }else{
+            regla_Bloque();
         }
     }
     
     private void regla_Process() throws IOException{
-        //Obtenemos la siguiente palabra
-        String palabra = obtenerCadena();
-        
-        if(palabra.equals("process")){
-            //Ahora checamos el =
-            String igual = obtenerCadena();
-            if(igual.equals("=")){
-                //Ahora checamos el identificador
-                String identificador = obtenerCadena();
-                if(isNombreVariable(identificador)){
-                    //Ahora checamos la apertura del proceso
-                    String llaveInicio = obtenerCadena();
-                    if(llaveInicio.equals("{")){
-                        regla_Bloque();
-                        //Ahora obtenemos la llave de cierre
-                        String llaveCierre = obtenerCadena();
-                        if(!llaveCierre.equals("}")){
-                            getError(CompilerError.ERROR_FIN_PROCESS.getValue());
-                        }else{
-                           regla_Process();
-                        }
+        //Verificamos la llamada recursiva
+        if(!this.isDone){
+            if(this.token_actual.equals("process")){
+                //Obtenemos el nombre del proceso
+                this.token_actual = obtenerCadena();
+                if(isNombreVariable(this.token_actual)){
+                    //Ahora checamos el =
+                    this.token_actual = obtenerCadena();
+                    if(this.token_actual.equals("=")){
+                            this.token_actual = obtenerCadena();
+                            if(this.token_actual.equals("{")){
+                                regla_Bloque();
+                                //Ahora obtenemos la llave de cierre
+                                this.token_actual = obtenerCadena();
+                                if(!this.token_actual.equals("}")){
+                                    getError(CompilerError.ERROR_FIN_PROCESS.getValue());
+                                }else{
+                                   //Leemos el siguiente token
+                                   this.token_actual = obtenerCadena();
+                                   regla_Bloque();
+                                }
+                            }else{
+                               getError(CompilerError.ERROR_INICIO_PROCESS.getValue());
+                            }
                     }else{
-                       getError(CompilerError.ERROR_INICIO_PROCESS.getValue());
+                        getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
                     }
                 }else{
                     getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
                 }
             }else{
-                getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
+                //Checamos si la palabra entra dentro de los follows
+                boolean isFollow = false;
+                for(String follows : AnalizadorArchivos.follows_Process){
+                    if(follows.equals(this.token_actual)){
+                        //Encontramos un follow
+                        isFollow = true;
+                        break;
+                    }
+                }
+
+                if(isFollow){
+                    regla_Proposicion();
+                }else{
+                    this.isDone = true;
+                }
             }
-        }else{
-            getError(CompilerError.ERROR_PROCESS.getValue());
         }
     }
     
     private void regla_Proposicion() throws IOException{
-        //Obtenemos la palabra reservada
-        String palabra_reservada = obtenerCadena();
-        
-        //Dependiendo la palabra reservada, tomamos un camino
-        switch(palabra_reservada){
-            case "read":{
-                regla_Read();
-                break;
-            }
-            case "print":{
-                regla_Imprimir();
-                break;
-            }
-            case "for":{
-                regla_CicloFor();
-                break;
-            }
-            case "if":{
-                regla_if();
-                break;
-            }
-            default:{
-                //Si no es ninguna, checamos que sea una variable inicializada
-                boolean isVariable = false;
-                for(String variable : this.variablesInicializadas){
-                    if(variable.equals(palabra_reservada)){
-                        isVariable = true;
+        //Checamos la llamada recursiva
+        if(!this.isDone){
+            //Dependiendo la palabra reservada, tomamos un camino
+            switch(this.token_actual){
+                //En cada caso, excepto el ultimo, obtenemos el siguiente token que va a ser evaluado
+                case "read":{
+                    this.token_actual = obtenerCadena();
+                    regla_Read();
+                    break;
+                }
+                case "print":{
+                    this.token_actual = obtenerCadena();
+                    regla_Imprimir();
+                    break;
+                }
+                case "for":{
+                    this.token_actual = obtenerCadena();
+                    regla_CicloFor();
+                    break;
+                }
+                case "if":{
+                    this.token_actual = obtenerCadena();
+                    regla_if();
+                    break;
+                }
+                default:{
+                    //Si no es ninguna, checamos que sea una variable inicializada
+                    boolean isVariable = false;
+                    for(String variable : this.variablesInicializadas){
+                        if(variable.equals(this.token_actual)){
+                            isVariable = true;
+                        }
+                    }
+
+                    //Checamos si era variable o no
+                    if(!isVariable){
+                        if(!this.token_actual.equals("}")){
+                            this.variableError = this.token_actual;
+                            getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
+                        }
+                    }else{
                         regla_Asignacion();
                     }
+                    break;
                 }
-                
-                //Checamos si era variable o no
-                if(!isVariable){
-                    getError(1);
-                }
-                break;
             }
         }
     }
     
     private void regla_Asignacion() throws IOException{
-        //Obtenemos la siguiente palabra
-        String variableInicial = obtenerCadena();
-        boolean isDeclared = false;
-        //Verificamos que la variable ya haya sido declarada
-        for(String variable : this.variablesInicializadas){
-            if(variable.equals(variableInicial)){
-                isDeclared = true;
-                break;
-            }
-        }
-        
-        //Checamos si está declarada o no
-        if(isDeclared){
-            regla_CaminoIdent();
-        }else{
-            getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
-        }
+        regla_CaminoIdent();
     }
     
     private void regla_CaminoIdent() throws IOException{
         //Checamos que camino sigue
-        String signoIgual = obtenerCadena();
+        this.token_actual = obtenerCadena();
         
         //Y verificamos que signo sigue
-        if(signoIgual.equals("=")){
+        if(this.token_actual.equals("=")){
             regla_Expresion();
+            
+            //Checamos que tenga un ;
+            if(!this.token_actual.equals(";")){
+                getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
+            }
         }else{
-            regla_Expresion();
+            getError(1);
         }
     }
     
-    private void regla_Read(){
-        //Obtenemos la siguiente palabra
-        String variableLeer = "";
-        try{
-            variableLeer = obtenerCadena();
-        }catch(IOException e){}
+    private void regla_Read() throws IOException{
         boolean isVariable = false;
         //Verificamos que esté dentro de las variables inicializadas
         for(String variable : this.variablesInicializadas){
             //Es válido si ya habia sido declarada anteriormente
-            if(variable.equals(variableLeer)){
+            if(variable.equals(this.token_actual)){
                 isVariable = true;
                 break;
             }
@@ -685,20 +759,20 @@ public class AnalizadorArchivos {
         //Validamos que sea una variable ya declarada
         if(!isVariable){
             getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
+        }else{
+            //Checamos el ;
+            this.token_actual = obtenerCadena();
+            if(!this.token_actual.equals(";")){
+                getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
+            }
         }
     }
     
-    private void regla_Imprimir(){
-        //Obtenemos lo que se quiere imprimir
-        String palabraAImprimir = "";
-        try {
-            palabraAImprimir = obtenerCadena();
-        } catch (IOException e) {}
-        
+    private void regla_Imprimir() throws IOException{
         //Checamos si es una variable inicializada
         boolean isVariable = false;
         for(String variable : this.variablesInicializadas){
-            if(variable.equals(palabraAImprimir)){
+            if(variable.equals(this.token_actual)){
                 isVariable = true;
                 break;
             }
@@ -706,107 +780,96 @@ public class AnalizadorArchivos {
         
         //Si no fue variable, checamos que sea numero o cadena
         if(!isVariable){
-            if(!(isNumero(palabraAImprimir) || isCadena(palabraAImprimir))){
+            if(!(isNumero(this.token_actual) || isCadena(this.token_actual))){
                 getError(1);
+            }
+        }else{
+            //Checamos el ;
+            this.token_actual = obtenerCadena();
+            if(!this.token_actual.equals(";")){
+                getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
             }
         }
     }
     
-    private void regla_CicloFor(){
-            //Evaluamos que tenga el parentesis
-            String parentesis_inicio = "";
-            try {
-                parentesis_inicio = obtenerCadena();
-            } catch (IOException e) {}
-            
-            if(parentesis_inicio.equals("(")){
+    private void regla_CicloFor() throws IOException{
+        
+            if(this.token_actual.equals("(")){
                 //Ahora checamos que la siguiente palabra sea el identificador
-                String identificador = "";
                 try {
-                    identificador = obtenerCadena();
+                    this.token_actual = obtenerCadena();
                 } catch (IOException e) {}
                 boolean isVariable = false;
                 for(String variable : this.variablesInicializadas){
-                    if(variable.equals(identificador)){
+                    if(variable.equals(this.token_actual)){
                         isVariable = true;
                         break;
                     }
                 }
                 //Evaluamos que sea un identificador
-                if(!isVariable){
+                if(isVariable){
                     //Verificamos que la siguiente palabra sea '='
-                    String signoIgual = "";
                     try {
-                        signoIgual = obtenerCadena();
+                        this.token_actual = obtenerCadena();
                     } catch (IOException e) {}
                     
-                    if(signoIgual.equals("=")){
+                    if(this.token_actual.equals("=")){
                         //Ahora checamos que lo siguiente sea una expresion
                         try {
                             regla_Expresion();
                         } catch (IOException e) {}
                         //Y obtenemos lo siguiente, que sería ';'
-                        String finInicializacion = "";
-                        try {
-                            finInicializacion = obtenerCadena();
-                        } catch (IOException e) {}
                         
-                        if(finInicializacion.equals(";")){
+                        if(this.token_actual.equals(";")){
                             //Checamos que sea correcta la condicion
                             try {
                                 regla_Condicion();
                             } catch (IOException e) {}
                              //Y obtenemos lo siguiente, que sería ';'
-                            finInicializacion = "";
-                            try {
-                                finInicializacion = obtenerCadena();
-                            } catch (IOException e) {}
-                            
-                            if(finInicializacion.equals(";")){
+
+                            if(this.token_actual.equals(";")){
                                 //Obtenemos la variable
-                                String variableControl = "";
                                 try {
-                                    variableControl =  obtenerCadena();
+                                    this.token_actual =  obtenerCadena();
                                 } catch (IOException e) {}
                                 isVariable = false;
                                 for(String variable : this.variablesInicializadas){
-                                    if(variable.equals(variableControl)){
+                                    if(variable.equals(this.token_actual)){
                                         isVariable = true;
                                         break;
                                     }
                                 }
                                 //Verificamos que sea una variable inicializada
-                                if(!isVariable){
+                                if(isVariable){
                                     //Por ultimo, checamos como van a ser los incrementos/decrementos
                                     try {
                                         regla_CaminoFor();
                                     } catch (IOException e) {}
                                     //Obtenemos el parentesis de cierre
-                                    String parentesisCierre = "";
                                     try {
-                                        parentesisCierre = obtenerCadena();
+                                        this.token_actual = obtenerCadena();
                                     } catch (IOException e) {}
                                     
-                                    if(parentesisCierre.equals(")")){
+                                    if(this.token_actual.equals(")")){
                                         //Obtenemos la llave de apertura
-                                        String llaveApertura = "";
                                         try {
-                                            llaveApertura = obtenerCadena();
+                                            this.token_actual = obtenerCadena();
                                         } catch (IOException e) {}
                                         
-                                        if(llaveApertura.equals("{")){
+                                        if(this.token_actual.equals("{")){
                                             //Seguimos con la regla que cumplirá el ciclo
                                             try {
+                                                this.token_actual = obtenerCadena();
                                                 regla_Proposicion();   
                                             } catch (IOException e) {}
                                             //Al final, checamos que se haya cerrado el ciclo
-                                            String llaveCierre = "";
                                             try {
-                                                llaveCierre = obtenerCadena();
+                                                this.token_actual = obtenerCadena();
                                             } catch (IOException e) {}
                                             
-                                            if(!llaveCierre.equals("}")){
-                                                getError(1);
+                                            //Aqui checamos si la ultima instruccion tenía ;
+                                            if(!this.token_actual.equals("}")){
+                                                 getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
                                             }
                                         }else{
                                             getError(1);
@@ -836,58 +899,46 @@ public class AnalizadorArchivos {
     
     private void regla_CaminoFor() throws IOException{
         //Obtenemos como va a actuar la variable de control
-        String comportamiento = obtenerCadena();
+        this.token_actual = obtenerCadena();
         
-        if(!(comportamiento.equals("SUMAR") || comportamiento.equals("RESTAR"))){
+        if(!(this.token_actual.equals("SUMAR") || this.token_actual.equals("RESTAR"))){
             getError(1);
         }
     }
     
-    private void regla_if(){
+    private void regla_if() throws IOException{
             //Checamos el parentesis de apertura
-            String parentesisApertura = "";
-            try {
-                parentesisApertura = obtenerCadena();
-            } catch (IOException e) {}
-            
-            if(parentesisApertura.equals("(")){
+        
+            if(this.token_actual.equals("(")){
                 //Checamos la condicion que tiene que cumplir
                 try {
                     regla_Condicion();
                 } catch (IOException e) {}
                 
                 //Obtenemos el parentesis de cierre
-                String parentesisCierre = "";
-                try {
-                    parentesisCierre = obtenerCadena();
-                } catch (IOException e) {}
-                
-                if(parentesisCierre.equals(")")){
+                if(this.token_actual.equals(")")){
                     //Checamos la llave de apertura
-                    String llaveApertura = "";
                     try {
-                        llaveApertura = obtenerCadena();
+                        this.token_actual = obtenerCadena();
                     } catch (IOException e) {}
                     
-                    if(llaveApertura.equals("{")){
+                    if(this.token_actual.equals("{")){
                         //Evaluamos la regla de proposion adentro de la condicion
+                        //Obtenemos la siguiente palabra
+                        this.token_actual = obtenerCadena();
                         try {
                             regla_Proposicion();
                         } catch (IOException e) {}
                         
                         //Verificamos que tenga llave de cierre
-                        String llaveCierre = "";
-                        try {
-                            llaveCierre = obtenerCadena();
-                        } catch (IOException e) {}
-                        
-                        if(llaveCierre.equals("}")){
+                        this.token_actual = obtenerCadena();
+                        if(this.token_actual.equals("}")){
                             //Verificamos que camino toma
                             try {
                                 regla_CaminoIf();
                             } catch (IOException e) {}                          
                         }else{
-                            getError(1);
+                            getError(CompilerError.ERROR_CIERRE_LLAVES.getValue());
                         }
                     }else{
                         getError(1);
@@ -902,14 +953,13 @@ public class AnalizadorArchivos {
     
     private void regla_Condicion()throws IOException{
         //Primero checamos la expresion
-        regla_Expresion();
+        regla_Expresion();//x
         
         //Checamos que lo siguiente esté dentro de los simbolos de comparacion
-        String operador = obtenerCadena();
         boolean isOperador = false;
-        
+ 
         for(String opAux : AnalizadorArchivos.operadoresComparacion){
-            if(opAux.equals(operador)){
+            if(opAux.equals(this.token_actual)){
                 isOperador = true;
                 break;
             }
@@ -919,10 +969,7 @@ public class AnalizadorArchivos {
             //Volvemos a checar la expresion
             regla_Expresion();
             
-            //Si el siguiente simbolo es && o ||, nos regresamos, si no, continuamos
-            String siguiente = obtenerCadena();
-            
-            if(siguiente.equals("&&") || siguiente.equals("&&")){
+            if(this.token_actual.equals("&&") || this.token_actual.equals("||")){
                 regla_Condicion();
             }
         }else{
@@ -933,51 +980,46 @@ public class AnalizadorArchivos {
     
     private void regla_CaminoIf() throws IOException{
         //Verificamos cual de los 2 caminos tomó
-        String palabra = obtenerCadena();
-        if(palabra.equals("else")){
+        this.token_actual = obtenerCadena();
+        if(this.token_actual.equals("else")){
             //Checamos si es el ultimo condicional
-            String siguientePalabraReservada = "";
             try{
-                siguientePalabraReservada = obtenerCadena();
+                this.token_actual = obtenerCadena();
             }catch(IOException e){}
-           
-            if(siguientePalabraReservada.equals("if")){
+
+            if(this.token_actual.equals("if")){
                 //Checamos el parentesis de apertura
-                String parentesisApertura = "";
                 try {
-                    parentesisApertura = obtenerCadena();
+                    this.token_actual = obtenerCadena();
                 } catch (IOException e) {}
 
-                if(parentesisApertura.equals("(")){
+                if(this.token_actual.equals("(")){
                     //Checamos la condicion que tiene que cumplir
                     regla_CondicionParentesis();
 
                     //Obtenemos el parentesis de cierre
-                    String parentesisCierre = "";
                     try {
-                        parentesisCierre = obtenerCadena();
+                        this.token_actual = obtenerCadena();
                     } catch (IOException e) {}
 
-                    if(parentesisCierre.equals(")")){
+                    if(this.token_actual.equals(")")){
                         //Checamos la llave de apertura
-                        String llaveApertura = "";
                         try {
-                            llaveApertura = obtenerCadena();
+                            this.token_actual = obtenerCadena();
                         } catch (IOException e) {}
 
-                        if(llaveApertura.equals("{")){
+                        if(this.token_actual.equals("{")){
                             //Evaluamos la regla de proposion adentro de la condicion
                             try {
                                 regla_Proposicion();
                             } catch (IOException e) {}
 
                             //Verificamos que tenga llave de cierre
-                            String llaveCierre = "";
                             try {
-                                llaveCierre = obtenerCadena();
+                                this.token_actual = obtenerCadena();
                             } catch (IOException e) {}
 
-                            if(llaveCierre.equals("}")){
+                            if(this.token_actual.equals("}")){
                                 //Verificamos que camino toma
                                 try {
                                     regla_CaminoIf();
@@ -994,25 +1036,19 @@ public class AnalizadorArchivos {
                 }else{
                     getError(1);
                 }
-            }else if(siguientePalabraReservada.equals("{")){
+            }else if(this.token_actual.equals("{")){
                 //Evaluamos la regla de proposion adentro de la condicion
                 try {
                     regla_Proposicion();
                 } catch (IOException e) {}
                         
                 //Verificamos que tenga llave de cierre
-                String llaveCierre = "";
                 try {
-                    llaveCierre = obtenerCadena();
+                    this.token_actual = obtenerCadena();
                 } catch (IOException e) {}
                         
-                if(llaveCierre.equals("}")){
-                    //Verificamos que camino toma
-                    try {
-                        regla_CaminoIf();
-                    } catch (IOException e) {}                          
-                }else{
-                    getError(1);
+                if(!this.token_actual.equals("}")){
+                     getError(1);
                 }
             }else{
                 getError(1);
@@ -1022,8 +1058,6 @@ public class AnalizadorArchivos {
             try {
                 llaveApertura = obtenerCadena();
             } catch (IOException e) {}
-        }else{
-            getError(1);
         }
     }
     
@@ -1037,86 +1071,117 @@ public class AnalizadorArchivos {
     }
     
     private void regla_Contenido() throws IOException{
-        regla_Identificador();
-        regla_Numero();
-        regla_Cadena();
-        regla_CrearExpresion();
+        //Obtenemos la siguiente palabra
+        this.token_actual = obtenerCadena();
+        
+        if(!regla_Identificador()){
+            if(!regla_Numero()){
+                if(!regla_Cadena()){
+                    if(!regla_CrearExpresion()){
+                        getError(CompilerError.ERROR_CONTENIDO.getValue());
+                    }
+                }
+            }
+        }   
     }
     
-    private void regla_Identificador() throws IOException{
-        //Obtenemos la siguiente palabra
-        String palabra = obtenerCadena();
+    private boolean regla_Identificador() throws IOException{
         boolean isVariable = false;
         
-        //Verificamos que esté dentro de las variables inicializadas
-        for(String variable : this.variablesInicializadas){
-            if(variable.equals(palabra)){
-               isVariable = true;
+        //Checamos que sea variable valida, ya que puede que sea un numero o una cadena o una expresion
+        if(isNombreVariable(this.token_actual)){
+            //Verificamos que esté dentro de las variables inicializadas
+            for(String variable : this.variablesInicializadas){
+                if(variable.equals(this.token_actual)){
+                   isVariable = true;
+                }
+            }
+            
+            if(!isVariable){
+                getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
+                System.exit(1);
             }
         }
-    }
-    
-    private void regla_Numero() throws IOException{
-        //Obtenemos la siguiente palabra
-        String palabra = obtenerCadena();
         
-        //Verificamos que sea un numero
-        if(!isNumero(palabra)){
-           getError(1); 
-        }
+        return true;
     }
     
-    private void regla_Cadena() throws IOException{
+    private boolean regla_Numero() throws IOException{
+        //Verificamos que sea un numero
+        if(isNumero(this.token_actual)){
+           return true;
+        }
+        return false;
+    }
+    
+    private boolean regla_Cadena() throws IOException{
        //No se hace nada ya que ya verificamos anteriormente si era una variable valida
        //Solo verificamos que sea una cadena
        //Obtenemos la siguiente palabra
-        String palabra = obtenerCadena();
         
         //Verificamos que sea un numero
-        if(!isCadena(palabra)){
-           getError(1); 
+        if(isCadena(this.token_actual)){
+           return true; 
         }
+        
+        return false;
     }
 
-    private void regla_CrearExpresion() throws IOException{
+    private boolean regla_CrearExpresion() throws IOException{
         //Primero checamos la apertura del parentesis
-        String apertura = obtenerCadena();
         
-        if(apertura.equals("(")){
+        if(this.token_actual.equals("(")){
             regla_Expresion();
             //Despues de la expresion, checamos que haya cerrado
-            String cierre = obtenerCadena();
+            this.token_actual = obtenerCadena();
             
-            if(!cierre.equals(")")){
-                getError(1);
+            if(!this.token_actual.equals(")")){
+                getError(CompilerError.ERROR_CIERRE_EXPRESION.getValue());
+                return false;
             }
         }else{
             getError(CompilerError.ERROR_APERTURA_EXPRESION.getValue());
+            return false;
         }
+        
+        return true;
     }
  
     private void regla_Aux4() throws IOException{
-        //Checamos que sea un operador
-        String operador = obtenerCadena();
-        boolean isOperador = false;
         
-        for(String op : AnalizadorArchivos.operadoresOperacion){
-            if(op.equals(operador)){
-                isOperador = true;
+        //Comparamos los follows
+        boolean isFollow = false;
+        this.token_actual = obtenerCadena();
+        for(String follow : AnalizadorArchivos.follows_AUX4){
+            if(follow.equals(this.token_actual)){
+                isFollow = true;
                 break;
             }
         }
         
-        if(isOperador){
-            //Nos volvemos a regresar
-            regla_Expresion();
+        if(!isFollow){
+            //Checamos que sea un operador
+            boolean isOperador = false;
+
+            for(String op : AnalizadorArchivos.operadoresOperacion){
+                if(op.equals(this.token_actual)){
+                    isOperador = true;
+                    break;
+                }
+            }
+            
+            if(isOperador){
+                //Nos volvemos a regresar
+                regla_Expresion();
+            }
         }
     }
     
     private void getError(int errorType){
+        System.out.println(this.token_actual);
         switch(errorType){
             case 1:{
-                throw new Error("Se esperaba un .");
+                throw new Error("No se esperaba ningún caracter");
             }
             case 2:{
                 throw new Error("Se esperaba una variable o una palabra reservada");
@@ -1127,10 +1192,20 @@ public class AnalizadorArchivos {
             case 4:{
                 throw new Error("Se esperaba el siguiente identificador: process");
             }
+            case 15:{
+                throw new Error("La variable " + this.token_actual + " no está inicializada");
+            }
+            case 17:{
+               throw new Error("Se esperaba la palabra reservada 'cte'"); 
+            }
+            case 19:{
+               throw new Error("Condición inválida"); 
+            }
             default:{
                 break;
             }
         }
+        //System.exit(1);
     }
 
     

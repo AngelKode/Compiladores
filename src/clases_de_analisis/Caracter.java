@@ -31,7 +31,8 @@ public enum Caracter{
     LINEA_OR(124),
     SIMBOLO_LINEA_BAJA(95),
     SIMBOLO_CERRAR(125),
-    COMILLAS(34);
+    COMILLAS(34),
+    COMA(44);
     
     private int valor_ascii;
     private int valor_inicio_ascii;
