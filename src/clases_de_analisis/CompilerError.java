@@ -30,7 +30,11 @@ public enum CompilerError{
     ERROR_FIN_AUXCONST(17),
     ERROR_FIN_AUXVAR(18),
     ERROR_FIN_SENTENCIA(19),
-    ERROR_CIERRE_LLAVES(20);
+    ERROR_CIERRE_LLAVES(20),
+    ERROR_TIPO_DATO(21),
+    ERROR_ASIGNACION_DATO(22),
+    ERROR_CAMBIO_CTE(23),
+    ERROR_CICLO_FOR(24);
            
     private int valorError;
 

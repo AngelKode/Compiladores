@@ -23,8 +23,9 @@ public class Compiladores {
      */
     public static void main(String[] args) throws FileNotFoundException, IOException {
         // TODO code application logic here
-
-        AnalizadorArchivos analizador = new AnalizadorArchivos(new File("C:\\Users\\depot\\Desktop\\Codigo.txt"));
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.showOpenDialog(null);
+        AnalizadorArchivos analizador = new AnalizadorArchivos(fileChooser.getSelectedFile());
         analizador.regla_Programa();
     }
     

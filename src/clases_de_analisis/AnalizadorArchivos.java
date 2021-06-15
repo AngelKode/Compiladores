@@ -5,6 +5,7 @@
  */
 package clases_de_analisis;
 
+import com.sun.org.apache.bcel.internal.Const;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -25,27 +26,25 @@ public class AnalizadorArchivos {
     private int valorCaracterAnterior;
     private boolean estado_lector;
     private boolean cadena_activada;
-    private static final String[] simbolos = new String[]{"cte","float","int","string","char","bool","read",
+    private static final String[] simbolos = new String[]{"cte","float","int","double","string","char","bool","read",
                                                           "true","false","+","-","/","*","==","!=","<",">",
                                                           "<=",">=","&&","||","=",";",",","if","else if","else",
                                                           "for","print","(",")","{","}"};
-//    private static final char[] letras = new char[]{'a','b','c','d','e','f','g','h','i','j','k','l','m','n','ñ','o', 
-//                                                    'p','q','r','s','t','u','v','w','x','y','z','A','B','C','D','E',
-//                                                    'F','G','H','I','J','K','L','M','N','Ñ','O','P','Q','R','S','T', 
-//                                                    'U','V','W','X','Y','Z'};
-//    private static final char[] numeros = new char[]{'0','1','2','3','4','5','6','7','8','9'};
+    private static final String[] palabrasReservadasVariables = new String[]{"cte","float","int","double","string","char","bool"};
     private static final String[] operadoresComparacion = new String[]{"==","!=",">",">=","<=","<"};
     private static final String[] operadoresOperacion = new String[]{"+","-","*","/"};
-    private static final String[] follows_AUXCTE = new String[]{"var","process" , "read" ,"print" ,"for" , "if"};
-    private static final String[] follows_AUXVAR = new String[]{"var","process" , "read" , "print" , "for" ,"if"};
+    private static final String[] follows_AUXCTE = new String[]{"float","int","double","string","char", "bool" ,"process" , "read" ,"print" ,"for" , "if"};
+    private static final String[] follows_AUXData = new String[]{"process" , "read" , "print" , "for" ,"if"};
     private static final String[] follows_Process = new String[]{"read" , "print" , "for" ,"if"};
     private static final String[] follows_AUX4 = new String[]{"*","+","/","-"};
     
     private static final String[] first = null;
     private String variableError;
-    private String token_actual, dataTypeActual, dataTypeAnterior, token_anterior;
-    private boolean addVariable, isDone, canRead;
-    private ArrayList<String> variablesInicializadas;
+    private String token_actual, variableTypeActual, dataTypeOperacionAsignacion ,dataTypeAnterior, variableNameActual;
+    private boolean setNameVariable,setValueVariable, addVariable,isDone, canRead, asignacionHabilitada, condicionHabilitada, getValorAnterior;
+    private int posicionVariableModificar;
+    private VariablesManager variablesInicializadas;
+    private ArrayList<String> procesosInicializados;
     //Objetos para checar identificadores
     private final Pattern patron;
     
@@ -58,17 +57,25 @@ public class AnalizadorArchivos {
             this.buffer.read();
         this.valorCaracterActual = Caracter.ESPACIO_BLANCO.getValue();
         this.valorCaracterAnterior = Caracter.ESPACIO_BLANCO.getValue();
-        this.variablesInicializadas = new ArrayList<>();
         this.estado_lector = false;//falso si no se ha empezado a leer, y verdadero en caso contrario
         this.patron = Pattern.compile("^(int$)|(float$)|(char$)|(double$)|(string$)|(cte$)|(bool$)|(print$)|"
                                       +"(true$)|(false$)|(if$)|(else$)|(for$)");//expresion regular para identificadores
         this.token_actual = "";
-        this.token_anterior = "";
-        this.addVariable = false;
+
+        this.setNameVariable = false;
+        this.setValueVariable = false;
         this.isDone = false;
         this.canRead = true;
+        this.asignacionHabilitada = false;
+        this.condicionHabilitada = false;
+        this.getValorAnterior = false;
         this.dataTypeAnterior = "";
-        this.dataTypeActual = "";
+        this.variableTypeActual = "";
+        this.variableNameActual = "";
+        this.dataTypeOperacionAsignacion = "";
+        this.posicionVariableModificar = 0;
+        this.variablesInicializadas = new VariablesManager();
+        this.procesosInicializados = new ArrayList<>();
     }
     
     private char getCaracterActual() throws IOException{
@@ -121,23 +128,49 @@ public class AnalizadorArchivos {
             if(matcher.find()){
                 if(this.valorCaracterActual != Caracter.FIN_DOCUMENTO.getValue() &&
                    this.valorCaracterActual != Caracter.ESPACIO_BLANCO.getValue()){
-                    if(palabra_retorno.equals("cte") || palabra_retorno.equals("var")){
-                        this.addVariable = true;
-                        if(this.dataTypeAnterior.equals(palabra_retorno) || this.dataTypeAnterior.equals("")){
-                            this.dataTypeAnterior = palabra_retorno;
-                        }else{
-                            this.addVariable = false;
+                    //Checamos si la palabra obtenida es una palabra reservada para inicializar variables
+                    for(String reservada : AnalizadorArchivos.palabrasReservadasVariables){
+                        if(palabra_retorno.equals(reservada)){
+                            this.variableTypeActual = reservada;
+                            this.setNameVariable = true;
+                            this.addVariable = true;
                         }
                     }
                 }
             }else{
-                if(this.addVariable){
-                    this.variablesInicializadas.add(palabra_retorno);
+                if(this.setNameVariable){
+                    //Cambiamos la variable de control para agregar la variable despues de un signo de =
+                    this.variableNameActual = palabra_retorno;
+                    this.setNameVariable = false;
                 }
             }      
         }else if(Caracter.NUMERO.isInRange(this.valorCaracterActual)){
-           //Aqui verificamos que sea un numero valido
-           palabra_retorno =  obtenerNumeroValido((char)this.valorCaracterActual);
+            //Aqui verificamos que sea un numero valido
+            palabra_retorno =  obtenerNumeroValido((char)this.valorCaracterActual);
+            //Y agregamos ese valor en caso de que esté habilitado
+            if(this.setValueVariable){
+                //Agregamos la nueva variable
+                this.variablesInicializadas.addVariable(this.variableTypeActual, this.variableNameActual, palabra_retorno);
+                this.setValueVariable = false;//Ponemos en falso esperando hasta la habilitación de agregar la variable
+            }
+        }else if(Caracter.COMILLAS.getValue() == this.valorCaracterActual){
+            //Si son comillas,regresamos todo
+            palabra_retorno = (char)this.valorCaracterActual + "";//Agregamos las comillas
+            int primerLetra = this.buffer.read();//Leemos hasta la siguiente letra, y obtenemos todos los caracteres
+            palabra_retorno += obtenerCadenaValida((char)primerLetra);
+            
+            //Agregamos las ultimas comillas
+            this.buffer.reset();
+            primerLetra = this.buffer.read();
+            this.buffer.mark(50);
+            palabra_retorno += (char) primerLetra;
+            
+            //Checamos si está habilitado el agregar una variable
+            if(this.setValueVariable){
+                //Agregamos la nueva variable
+                this.variablesInicializadas.addVariable(this.variableTypeActual, this.variableNameActual, palabra_retorno);
+                this.setValueVariable = false;//Ponemos en falso esperando hasta la habilitación de agregar la variable
+            }
         }else if(Caracter.SIMBOLOS_PARENTESIS.isInRange(this.valorCaracterActual)){
             //Si son parentesis, unicamente se manda, y el que sigue
             palabra_retorno = (char) this.valorCaracterActual + "";
@@ -152,12 +185,20 @@ public class AnalizadorArchivos {
         }else if(Caracter.COMA.getValue() == this.valorCaracterActual){
             palabra_retorno = (char) this.valorCaracterActual + "";
         }else if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+            //Checamos si esta habilitado el agregar una variable
+            if(this.addVariable){
+                this.setValueVariable = true;
+            }
             //Checamos si el siguiente es el mismo
             palabra_retorno = (char) this.valorCaracterActual + "";
             this.buffer.mark(50);
             this.valorCaracterActual = this.buffer.read();
             
             if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+                //Verificamos que esté habilitado el agregar variable
+                if(this.addVariable){
+                    this.setValueVariable = true;//Habilitamos agregar el valor
+                }
                 palabra_retorno += (char) this.valorCaracterActual + "";
                 this.buffer.mark(50);
             }
@@ -167,6 +208,7 @@ public class AnalizadorArchivos {
             this.valorCaracterActual = this.buffer.read();
             
             if(Caracter.IGUAL.getValue() == this.valorCaracterActual){
+                
                 palabra_retorno += (char) this.valorCaracterActual + "";
                 this.buffer.mark(50);
             }      
@@ -218,9 +260,15 @@ public class AnalizadorArchivos {
             palabra_retorno = "";
             this.buffer.read();
             this.buffer.mark(50);
-            palabra_retorno = obtenerCadena(); 
-        }
-        else if(Caracter.ESPACIO_BLANCO.getValue() == this.valorCaracterActual){
+            palabra_retorno = obtenerCadena();
+        }else if(Caracter.TAB_HORIZONTAL.getValue() == this.valorCaracterActual){
+            palabra_retorno = "";
+            //Nos movemos hasta una posicion antes de los espacios que haya
+            while((this.valorCaracterActual = this.buffer.read()) == Caracter.ESPACIO_BLANCO.getValue()){
+                this.buffer.mark(50);
+            }
+            palabra_retorno = obtenerCadena();
+        }else if(Caracter.ESPACIO_BLANCO.getValue() == this.valorCaracterActual){
             palabra_retorno = "";
             //Nos movemos hasta una posicion antes de los espacios que haya
             while((this.valorCaracterActual = this.buffer.read()) == Caracter.ESPACIO_BLANCO.getValue()){
@@ -251,11 +299,6 @@ public class AnalizadorArchivos {
                 palabra_retorno = leerPalabraRestante(palabra_retorno);//Leemos lo restante, ya que no es válido
                 this.buffer.mark(50);
             }
-        }
-        
-        //Checamos si ya acabamos de leer todo el documento
-        if(this.valorCaracterActual == Caracter.FIN_DOCUMENTO.getValue()){
-            this.buffer.close();//Cerramos el flujo de datos
         }
             
         this.estado_lector = true;
@@ -334,7 +377,8 @@ public class AnalizadorArchivos {
                 //Checamos si es minuscula, mayuscula o linea _
                 if(Caracter.LETRA_MAY.isInRange(caracterSiguiente) ||
                     Caracter.LETRA_MIN.isInRange(caracterSiguiente) ||
-                    Caracter.SIMBOLO_LINEA_BAJA.getValue() == caracterSiguiente){
+                    Caracter.SIMBOLO_LINEA_BAJA.getValue() == caracterSiguiente ||
+                    Caracter.NUMERO.isInRange(caracterSiguiente)){
                     variableValida += (char)caracterSiguiente;//agregamos el caracter
                     this.buffer.mark(50);//marcamos la posicion
                     caracterSiguiente = this.buffer.read();//avanzamos al siguiente
@@ -351,6 +395,28 @@ public class AnalizadorArchivos {
         return variableValida;
     }
     
+    private String obtenerCadenaValida(char primerCaracter) throws IOException{
+       String variableValida = "";
+        int caracterSiguiente = 0;
+       
+        //Checamos los caracteres
+            variableValida += primerCaracter;
+            //Ciclo que obtiene lo que es una cadena valida
+            this.buffer.mark(50);//marcamos la posicion
+            caracterSiguiente = this.buffer.read();//leemos la siguiente letra
+            while(caracterSiguiente != Caracter.ESPACIO_BLANCO.getValue() &&
+                  caracterSiguiente != Caracter.SALTO_LINEA.getValue() &&
+                  caracterSiguiente != Caracter.RETORNO_DE_CARRO.getValue() &&
+                  caracterSiguiente !=  Caracter.FIN_DOCUMENTO.getValue() &&
+                  caracterSiguiente != Caracter.COMILLAS.getValue()){
+                
+                variableValida += (char)caracterSiguiente;//agregamos el caracter
+                this.buffer.mark(50);//marcamos la posicion
+                caracterSiguiente = this.buffer.read();//avanzamos al siguiente    
+            }
+            
+        return variableValida; 
+    }
     private String isCadenaValida(String cadena){
         if(isSimbol(cadena) || isNumero(cadena) || isNombreVariable(cadena) || isCadena(cadena)){
             return "Es válido";
@@ -455,7 +521,7 @@ public class AnalizadorArchivos {
         if(!this.token_actual.equals("")){
             //Ponemos las funciones para cada bloque
             regla_AUXCTE();
-            regla_AUXVAR();
+            regla_AUXData();
             regla_Process();
             regla_Proposicion();
             //Sin condiciones ya que no es terminal
@@ -480,29 +546,21 @@ public class AnalizadorArchivos {
                 }
                 //Checamos si es follow
                 if(isFollow){
-                   switch(posicionSiguienteRegla){
-                       case 0:{
-                           regla_AUXVAR();
-                           break;
-                       }
-                       case 1:{
-                           regla_Process();
-                           break;
-                       }
-                       default:{
-                           regla_Proposicion();
-                           break;
-                       }
-                   }
+                    if(posicionSiguienteRegla <= 5){
+                        regla_AUXData();
+                    }else if(posicionSiguienteRegla == 6){
+                        regla_Process();
+                    }else{
+                       regla_Proposicion(); 
+                    }
                 }else{
-                    //Terminamos ya que ninguno es
-                    this.isDone = true;
+                    regla_Proposicion();//En caso de que sea la asignación de alguna variable
                 }
             }else{
                 
                 //Obtenemos el nombre de la variable
                 this.token_actual = obtenerCadena();
-                
+
                 if(isNombreVariable(this.token_actual)){
                     //Obtenemos el simbolo de asignacion
                     this.token_actual = obtenerCadena();
@@ -529,6 +587,8 @@ public class AnalizadorArchivos {
     private void regla_AUX1() throws IOException{
         //Tiene que ser un ; o una , el token 
         if(this.token_actual.equals(",")){
+            //Habilitamos el registro de una nueva variable
+            this.setNameVariable = true;
             //Obtenemos el nombre del identificador
             this.token_actual = obtenerCadena();
 
@@ -555,19 +615,30 @@ public class AnalizadorArchivos {
             //Si es diferente a ';' está mal
             getError(CompilerError.ERROR_FINAL_CTE.getValue());
         }else{
+            //Aqui ya sería un nuevo tipo de dato
+            this.addVariable = false;
+            this.setNameVariable = false;
             regla_Bloque();
         }
     }
     
-    
-    private void regla_AUXVAR() throws IOException{
-        //Checamos la llamada recursiva
+    private void regla_AUXData() throws IOException{
+       //Verificamos si hay llamada recursiva y ya terminamos
         if(!this.isDone){
-            if(!this.token_actual.equals("var")){
-                //Checamos si la palabra entra dentro de los follows
+            //Verificamos que el primer token sea distinto a todos los tipos de datos que hay
+            boolean isReservada = false;
+            for(String reservada : AnalizadorArchivos.palabrasReservadasVariables){
+                if(reservada.equals(this.token_actual)){
+                    isReservada = true;
+                    break;
+                }
+            }
+            //Si no es, checamos sus follows
+            if(!isReservada){
+                //Verificamos los follows
                 boolean isFollow = false;
                 int posicionSiguienteRegla = 0;
-                for(String follows : AnalizadorArchivos.follows_AUXVAR){
+                for(String follows : AnalizadorArchivos.follows_AUXData){
                     if(follows.equals(this.token_actual)){
                         //Encontramos un follow
                         isFollow = true;
@@ -575,10 +646,9 @@ public class AnalizadorArchivos {
                     }
                     posicionSiguienteRegla++;
                 }
-                
-                //Checamos si es follow o no
+                //Checamos si es follow
                 if(isFollow){
-                    switch(posicionSiguienteRegla){
+                   switch(posicionSiguienteRegla){
                        case 0:{
                            regla_Process();
                            break;
@@ -589,39 +659,86 @@ public class AnalizadorArchivos {
                        }
                    }
                 }else{
+                    //Terminamos ya que ninguno es
                     this.isDone = true;
                 }
             }else{
-                //Obtenemos el nombre del identificador
+                
+                //Obtenemos el nombre de la variable
                 this.token_actual = obtenerCadena();
-
+                
                 if(isNombreVariable(this.token_actual)){
-                    regla_AUXVAR2();
+                    //Obtenemos el simbolo de asignacion
+                    this.token_actual = obtenerCadena();
+
+                    if(this.token_actual.equals("=")){
+                        //Obtenemos el valor que tendrá la variable
+                        this.token_actual = obtenerCadena();
+                        //Checamos que el tipo de dato que se le asigne sea correcto
+                        String tipo = this.variablesInicializadas.getDataTypeAt(this.variablesInicializadas.getAllDataType().size() - 1);
+                        String contenido = (String)this.variablesInicializadas.getDataValueAt(this.variablesInicializadas.getAllDataValue().size() - 1);
+                        
+                        if((isNumero(contenido) && (tipo.equals("int") || tipo.equals("double") || tipo.equals("float"))) ||
+                           (isCadena(contenido) && (tipo.equals("string") || tipo.equals("char"))) ||
+                           (tipo.equals("boolean") && (contenido.equals("true") || contenido.equals("false")))){
+                            this.token_actual = obtenerCadena();
+                            regla_AuxData1();
+                        }else{
+                            getError(CompilerError.ERROR_TIPO_DATO.getValue());
+                        }
+                    }else{
+                        getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
+                    }
                 }else{
                     getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
-                }
+                } 
             }
-        }
+        } 
     }
     
-    private void regla_AUXVAR2() throws IOException{
-        //Checamos que sea , o ;
-        this.token_actual = obtenerCadena();
-        
+    private void regla_AuxData1() throws IOException{
+        //Tiene que ser un ; o una , el token 
         if(this.token_actual.equals(",")){
+            //Habilitamos el registro de una nueva variable
+            this.setNameVariable = true;
             //Obtenemos el nombre del identificador
             this.token_actual = obtenerCadena();
-            
+
             if(isNombreVariable(this.token_actual)){
-                regla_AUXVAR2();
+                this.token_actual = obtenerCadena();
+
+                if(this.token_actual.equals("=")){
+                    //Obtenemos el valor que tendrá la variable
+                    this.token_actual = obtenerCadena();
+                    
+                    //Checamos que el tipo de dato que se le asigne sea correcto
+                    String tipo = this.variablesInicializadas.getDataTypeAt(this.variablesInicializadas.getAllDataType().size() - 1);
+                    String contenido = (String)this.variablesInicializadas.getDataValueAt(this.variablesInicializadas.getAllDataValue().size() - 1);
+                    
+                    //Si es correcto avanzamos, si no lanzamos el error
+                    if((isNumero(contenido) && (tipo.equals("int") || tipo.equals("double") || tipo.equals("float"))) ||
+                       (isCadena(contenido) && (tipo.equals("string") || tipo.equals("char"))) ||
+                       (tipo.equals("boolean") && (contenido.equals("true") || contenido.equals("false")))){
+                        this.token_actual = obtenerCadena();
+                        regla_AuxData1();
+                    }else{
+                        getError(CompilerError.ERROR_TIPO_DATO.getValue());
+                    }
+                }else{
+                    getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
+                }
             }else{
                 getError(CompilerError.ERROR_IDENTIFICADOR.getValue());
-            }
+            } 
         }else if(!this.token_actual.equals(";")){
+            //Si es diferente a ';' está mal
             getError(CompilerError.ERROR_FINAL_CTE.getValue());
         }else{
+            //Aqui ya sería un nuevo tipo de dato
+            this.addVariable = false;
+            this.setNameVariable = false;
             regla_Bloque();
-        }
+        }    
     }
     
     private void regla_Process() throws IOException{
@@ -631,21 +748,23 @@ public class AnalizadorArchivos {
                 //Obtenemos el nombre del proceso
                 this.token_actual = obtenerCadena();
                 if(isNombreVariable(this.token_actual)){
+                    this.procesosInicializados.add(this.token_actual);//Agregamos el nombre del nuevo Proceso
                     //Ahora checamos el =
                     this.token_actual = obtenerCadena();
                     if(this.token_actual.equals("=")){
                             this.token_actual = obtenerCadena();
                             if(this.token_actual.equals("{")){
-                                regla_Bloque();
-                                //Ahora obtenemos la llave de cierre
                                 this.token_actual = obtenerCadena();
+                                regla_Proposicion();
+                                
+                                if(!this.getValorAnterior){
+                                    this.token_actual = obtenerCadena();
+                                }
+                                 
                                 if(!this.token_actual.equals("}")){
                                     getError(CompilerError.ERROR_FIN_PROCESS.getValue());
-                                }else{
-                                   //Leemos el siguiente token
-                                   this.token_actual = obtenerCadena();
-                                   regla_Bloque();
                                 }
+                                regla_Bloque();
                             }else{
                                getError(CompilerError.ERROR_INICIO_PROCESS.getValue());
                             }
@@ -704,7 +823,7 @@ public class AnalizadorArchivos {
                 default:{
                     //Si no es ninguna, checamos que sea una variable inicializada
                     boolean isVariable = false;
-                    for(String variable : this.variablesInicializadas){
+                    for(String variable : this.variablesInicializadas.getAllDataName()){
                         if(variable.equals(this.token_actual)){
                             isVariable = true;
                         }
@@ -712,21 +831,60 @@ public class AnalizadorArchivos {
 
                     //Checamos si era variable o no
                     if(!isVariable){
-                        if(!this.token_actual.equals("}")){
-                            this.variableError = this.token_actual;
-                            getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
+                        //Si no fue variable, checamos que sea un proceso
+                        boolean isProceso = false;
+                        for(String nombreProceso : this.procesosInicializados){
+                            if(nombreProceso.equals(this.token_actual)){
+                                isProceso = true;
+                                break;
+                            }
+                        }
+                        //Verficamos que el proceso ya se haya definido
+                        if(!isProceso){
+                            if(!this.token_actual.equals("}")){
+                                this.variableError = this.token_actual;
+                                getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
+                            }
+                        }else{
+                            //Ahora checamos que tenga ; final
+                            this.token_actual = obtenerCadena();
+                            if(!this.token_actual.equals(";")){
+                                getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
+                            }
+                            
+                            this.token_actual = obtenerCadena();
+                            //Checamos si tiene llave de cierre o no
+                            if(!this.token_actual.equals("}")){
+                                regla_Proposicion();
+                            }else{
+                                this.getValorAnterior = true;
+                            }
                         }
                     }else{
-                        regla_Asignacion();
+                        //Buscamos que tipo de dato es
+                        this.posicionVariableModificar = 0;
+                        for(String variable : this.variablesInicializadas.getAllDataName()){
+                            if(variable.equals(this.token_actual)){
+                                break;
+                            }
+                            this.posicionVariableModificar++;
+                        }
+                        this.dataTypeOperacionAsignacion = this.variablesInicializadas.getDataTypeAt(this.posicionVariableModificar);//Obtenemos el tipo de dato
+                        regla_CaminoIdent();
+                        
+                        this.token_actual = obtenerCadena();
+                        //Checamos si tiene llave de cierre o no
+                        if(!this.token_actual.equals("}")){
+                            regla_Proposicion();
+                        }else{
+                            this.getValorAnterior = true;
+                        }
+                        
                     }
                     break;
                 }
             }
         }
-    }
-    
-    private void regla_Asignacion() throws IOException{
-        regla_CaminoIdent();
     }
     
     private void regla_CaminoIdent() throws IOException{
@@ -735,6 +893,7 @@ public class AnalizadorArchivos {
         
         //Y verificamos que signo sigue
         if(this.token_actual.equals("=")){
+            this.asignacionHabilitada = true;//Habilitamos la asignacion
             regla_Expresion();
             
             //Checamos que tenga un ;
@@ -742,14 +901,14 @@ public class AnalizadorArchivos {
                 getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
             }
         }else{
-            getError(1);
+            getError(CompilerError.ERROR_SIGNO_IGUAL.getValue());
         }
     }
     
     private void regla_Read() throws IOException{
         boolean isVariable = false;
         //Verificamos que esté dentro de las variables inicializadas
-        for(String variable : this.variablesInicializadas){
+        for(String variable : this.variablesInicializadas.getAllDataName()){
             //Es válido si ya habia sido declarada anteriormente
             if(variable.equals(this.token_actual)){
                 isVariable = true;
@@ -771,7 +930,7 @@ public class AnalizadorArchivos {
     private void regla_Imprimir() throws IOException{
         //Checamos si es una variable inicializada
         boolean isVariable = false;
-        for(String variable : this.variablesInicializadas){
+        for(String variable : this.variablesInicializadas.getAllDataName()){
             if(variable.equals(this.token_actual)){
                 isVariable = true;
                 break;
@@ -800,11 +959,15 @@ public class AnalizadorArchivos {
                     this.token_actual = obtenerCadena();
                 } catch (IOException e) {}
                 boolean isVariable = false;
-                for(String variable : this.variablesInicializadas){
+                int contador = 0;
+                for(String variable : this.variablesInicializadas.getAllDataName()){
                     if(variable.equals(this.token_actual)){
                         isVariable = true;
+                        //Asignamos el tipo de dato que se espera asignar
+                        this.dataTypeOperacionAsignacion = this.variablesInicializadas.getDataTypeAt(contador);
                         break;
                     }
+                    contador++;
                 }
                 //Evaluamos que sea un identificador
                 if(isVariable){
@@ -833,7 +996,7 @@ public class AnalizadorArchivos {
                                     this.token_actual =  obtenerCadena();
                                 } catch (IOException e) {}
                                 isVariable = false;
-                                for(String variable : this.variablesInicializadas){
+                                for(String variable : this.variablesInicializadas.getAllDataName()){
                                     if(variable.equals(this.token_actual)){
                                         isVariable = true;
                                         break;
@@ -857,22 +1020,18 @@ public class AnalizadorArchivos {
                                         } catch (IOException e) {}
                                         
                                         if(this.token_actual.equals("{")){
-                                            //Seguimos con la regla que cumplirá el ciclo
-                                            try {
-                                                this.token_actual = obtenerCadena();
-                                                regla_Proposicion();   
-                                            } catch (IOException e) {}
-                                            //Al final, checamos que se haya cerrado el ciclo
-                                            try {
-                                                this.token_actual = obtenerCadena();
-                                            } catch (IOException e) {}
+                                            this.token_actual = obtenerCadena();
+                                            regla_Proposicion();
                                             
-                                            //Aqui checamos si la ultima instruccion tenía ;
+                                            if(!this.getValorAnterior){
+                                                this.token_actual = obtenerCadena();
+                                            }
+                                            
                                             if(!this.token_actual.equals("}")){
-                                                 getError(CompilerError.ERROR_FIN_SENTENCIA.getValue());
+                                                getError(CompilerError.ERROR_FIN_PROCESS.getValue());
                                             }
                                         }else{
-                                            getError(1);
+                                            getError(CompilerError.ERROR_INICIO_PROCESS.getValue());
                                         }
                                     }else{
                                         getError(1);
@@ -890,7 +1049,7 @@ public class AnalizadorArchivos {
                         getError(1);
                     }
                 }else{
-                    getError(1);
+                    getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
                 }
             }else{
                 getError(1);
@@ -902,7 +1061,7 @@ public class AnalizadorArchivos {
         this.token_actual = obtenerCadena();
         
         if(!(this.token_actual.equals("SUMAR") || this.token_actual.equals("RESTAR"))){
-            getError(1);
+            getError(CompilerError.ERROR_CICLO_FOR.getValue());
         }
     }
     
@@ -931,7 +1090,10 @@ public class AnalizadorArchivos {
                         } catch (IOException e) {}
                         
                         //Verificamos que tenga llave de cierre
-                        this.token_actual = obtenerCadena();
+                        if(!this.getValorAnterior){
+                            this.token_actual = obtenerCadena();
+                        }
+                        
                         if(this.token_actual.equals("}")){
                             //Verificamos que camino toma
                             try {
@@ -953,7 +1115,8 @@ public class AnalizadorArchivos {
     
     private void regla_Condicion()throws IOException{
         //Primero checamos la expresion
-        regla_Expresion();//x
+        this.asignacionHabilitada = false;
+        regla_Expresion();
         
         //Checamos que lo siguiente esté dentro de los simbolos de comparacion
         boolean isOperador = false;
@@ -966,6 +1129,8 @@ public class AnalizadorArchivos {
         }
         
         if(isOperador){
+            this.asignacionHabilitada = true;
+            this.condicionHabilitada = false;//Para poder evaluar los datos que sean correctos
             //Volvemos a checar la expresion
             regla_Expresion();
             
@@ -1011,7 +1176,7 @@ public class AnalizadorArchivos {
                         if(this.token_actual.equals("{")){
                             //Evaluamos la regla de proposion adentro de la condicion
                             try {
-                                regla_Proposicion();
+                                regla_Bloque();
                             } catch (IOException e) {}
 
                             //Verificamos que tenga llave de cierre
@@ -1074,15 +1239,52 @@ public class AnalizadorArchivos {
         //Obtenemos la siguiente palabra
         this.token_actual = obtenerCadena();
         
-        if(!regla_Identificador()){
-            if(!regla_Numero()){
-                if(!regla_Cadena()){
-                    if(!regla_CrearExpresion()){
-                        getError(CompilerError.ERROR_CONTENIDO.getValue());
+        if(!this.asignacionHabilitada){
+           if(!regla_Identificador()){
+                if(!regla_Numero()){
+                    if(!regla_Cadena()){
+                        if(!regla_CrearExpresion()){
+                            getError(CompilerError.ERROR_CONTENIDO.getValue());
+                        }
                     }
+                } 
+            }else{
+                //Si si es un identificador, tenemos que verificar que la variable exista
+                boolean isVariable = false;
+                int contador = 0;
+                for(String variable : this.variablesInicializadas.getAllDataName()){
+                    if(variable.equals(this.token_actual)){
+                        isVariable = true;
+                        //Asignamos el tipo de dato que se espera asignar
+                        this.dataTypeOperacionAsignacion = this.variablesInicializadas.getDataTypeAt(contador);
+                        this.posicionVariableModificar = contador;
+                        break;
+                    }
+                    contador++;
+                }
+                //En caso de que no sea, mandamos el error
+                if(!isVariable){
+                    getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
                 }
             }
-        }   
+        }else{
+           if(this.dataTypeOperacionAsignacion.equals("string") || this.dataTypeOperacionAsignacion.equals("char")){
+               if(!isCadena(token_actual)){
+                   getError(CompilerError.ERROR_ASIGNACION_DATO.getValue());
+               }
+           }else if(this.dataTypeOperacionAsignacion.equals("int") || this.dataTypeOperacionAsignacion.equals("double") || this.dataTypeOperacionAsignacion.equals("float")){
+               if(!isNumero(token_actual)){
+                  getError(CompilerError.ERROR_ASIGNACION_DATO.getValue()); 
+               }
+           }else if(this.dataTypeOperacionAsignacion.equals("bool")){
+               if(!(this.token_actual.equals("true") || this.token_actual.equals("false"))){
+                  getError(CompilerError.ERROR_ASIGNACION_DATO.getValue()); 
+               }
+           }else if(this.dataTypeOperacionAsignacion.equals("cte")){
+               getError(CompilerError.ERROR_CAMBIO_CTE.getValue());
+           }
+        }
+        
     }
     
     private boolean regla_Identificador() throws IOException{
@@ -1091,19 +1293,16 @@ public class AnalizadorArchivos {
         //Checamos que sea variable valida, ya que puede que sea un numero o una cadena o una expresion
         if(isNombreVariable(this.token_actual)){
             //Verificamos que esté dentro de las variables inicializadas
-            for(String variable : this.variablesInicializadas){
+            for(String variable : this.variablesInicializadas.getAllDataName()){
                 if(variable.equals(this.token_actual)){
                    isVariable = true;
                 }
             }
             
-            if(!isVariable){
-                getError(CompilerError.ERROR_VARIABLE_NO_INICIALIZADA.getValue());
-                System.exit(1);
-            }
+            return isVariable;
         }
         
-        return true;
+        return isVariable;
     }
     
     private boolean regla_Numero() throws IOException{
@@ -1192,6 +1391,15 @@ public class AnalizadorArchivos {
             case 4:{
                 throw new Error("Se esperaba el siguiente identificador: process");
             }
+            case 6:{
+                throw new Error("Se esperaba un signo =");
+            }
+            case 11:{
+                throw new Error("Se esperaba una llave {");
+            }
+            case 12:{
+                throw new Error("Se esperaba una llave }");
+            }
             case 15:{
                 throw new Error("La variable " + this.token_actual + " no está inicializada");
             }
@@ -1200,6 +1408,21 @@ public class AnalizadorArchivos {
             }
             case 19:{
                throw new Error("Condición inválida"); 
+            }
+            case 20:{
+               throw new Error("Se esperaba una llave de cierre");  
+            }
+            case 21:{
+               throw new Error("La variable " + this.variableNameActual + " esperaba un dato de tipo " + this.variableTypeActual);
+            }
+            case 22:{
+               throw new Error("Se esperaban datos de tipo " + this.dataTypeOperacionAsignacion + " para la variable " + this.variablesInicializadas.getDataNameAt(this.posicionVariableModificar)); 
+            }
+            case 23:{
+               throw new Error("Las variables de tipo cte no se pueden alterar");
+            }
+            case 24:{
+                throw new Error("Se esperaba la palabra SUMAR/RESTAR");
             }
             default:{
                 break;

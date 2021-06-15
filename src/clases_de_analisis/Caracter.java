@@ -13,6 +13,7 @@ package clases_de_analisis;
 public enum Caracter{
     
     FIN_DOCUMENTO(-1),
+    TAB_HORIZONTAL(9),
     SALTO_LINEA(10),
     RETORNO_DE_CARRO(13),
     ESPACIO_BLANCO(32),
